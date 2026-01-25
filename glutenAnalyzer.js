@@ -3,7 +3,7 @@
 // Gluten-focused, allergy-aware, UX-safe
 // ===================================
 
-// 1️⃣ AÇIK OLUMSUZ BEYANLAR (sadece net "NOT" ifadeleri)
+// 1️⃣ AÇIK OLUMSUZ BEYANLAR
 const NEGATIVE_PATTERNS = [
   /\bnot safe for celiac\b/,
   /\bnot safe for coeliac\b/,
@@ -27,7 +27,7 @@ const DEFINITE_GLUTEN = [
   "semolina"
 ];
 
-// 3️⃣ SADECE GLUTENLE İLGİLİ ÇAPRAZ BULAŞ RİSKİ
+// 3️⃣ GLUTEN ÇAPRAZ BULAŞ RİSKİ
 const GLUTEN_RISK_PATTERNS = [
   /may contain.*gluten/,
   /may contain traces of gluten/,
@@ -37,14 +37,12 @@ const GLUTEN_RISK_PATTERNS = [
 
 // 4️⃣ POZİTİF (ÜRETİCİ) BEYANLAR
 const SAFE_TERMS = [
-  // Türkçe
   "glutensiz",
   "gluten içermez",
   "glutensizdir",
   "çölyak hastaları için uygundur",
   "çölyaklara uygundur",
 
-  // English
   "gluten free",
   "gluten-free",
   "glutene free",
@@ -52,7 +50,6 @@ const SAFE_TERMS = [
   "free from gluten",
   "without gluten",
 
-  // Gluten intolerance
   "gluten intolerance",
   "glutene intolerance",
   "for people with gluten intolerance",
@@ -60,7 +57,6 @@ const SAFE_TERMS = [
   "designed for people with gluten intolerance",
   "designed for people with glutene intolerance",
 
-  // Celiac-specific
   "safe for celiac",
   "safe for coeliac",
   "suitable for celiac",
@@ -70,7 +66,7 @@ const SAFE_TERMS = [
   "suitable for coeliacs"
 ];
 
-// 5️⃣ DİĞER ALERJENLER (bilgi amaçlı)
+// 5️⃣ DİĞER ALERJENLER
 const OTHER_ALLERGENS = [
   "soy",
   "soya",
@@ -86,7 +82,7 @@ const OTHER_ALLERGENS = [
 ];
 
 // -------------------------------
-// Yardımcı: normalize
+// Yardımcı
 // -------------------------------
 function normalizeText(text = "") {
   return text
@@ -99,8 +95,16 @@ function normalizeText(text = "") {
 // -------------------------------
 // ANA ANALİZ
 // -------------------------------
-function analyzeGluten(ingredientsRaw = "") {
-  if (!ingredientsRaw) {
+function analyzeGluten(input = {}) {
+  // Geriye uyumluluk
+  if (typeof input === "string") {
+    input = { ingredients: input };
+  }
+
+  const ingredientsRaw = input.ingredients || "";
+  const productNameRaw = input.productName || "";
+
+  if (!ingredientsRaw && !productNameRaw) {
     return {
       status: "unknown",
       reason: "İçerik bilgisi bulunamadı",
@@ -109,14 +113,16 @@ function analyzeGluten(ingredientsRaw = "") {
     };
   }
 
-  const text = normalizeText(ingredientsRaw);
+  const ingredientsText = normalizeText(ingredientsRaw);
+  const productNameText = normalizeText(productNameRaw);
+  const combinedText = `${productNameText} ${ingredientsText}`;
 
   const allergenWarnings = OTHER_ALLERGENS.filter(a =>
-    text.includes(a)
+    ingredientsText.includes(a)
   );
 
   // 1️⃣ AÇIK OLUMSUZLUK
-  if (NEGATIVE_PATTERNS.some(p => p.test(text))) {
+  if (NEGATIVE_PATTERNS.some(p => p.test(combinedText))) {
     return {
       status: "unsafe",
       reason: "Üretici çölyak için güvenli olmadığını belirtmiş",
@@ -126,7 +132,7 @@ function analyzeGluten(ingredientsRaw = "") {
   }
 
   // 2️⃣ KESİN GLUTEN
-  if (DEFINITE_GLUTEN.some(term => text.includes(term))) {
+  if (DEFINITE_GLUTEN.some(term => ingredientsText.includes(term))) {
     return {
       status: "unsafe",
       reason: "Kesin gluten içeren bileşen bulundu",
@@ -136,7 +142,7 @@ function analyzeGluten(ingredientsRaw = "") {
   }
 
   // 3️⃣ GLUTEN ÇAPRAZ BULAŞ
-  if (GLUTEN_RISK_PATTERNS.some(p => p.test(text))) {
+  if (GLUTEN_RISK_PATTERNS.some(p => p.test(ingredientsText))) {
     return {
       status: "risky",
       reason: "Etikette glutenle ilgili çapraz bulaş uyarısı var",
@@ -145,17 +151,17 @@ function analyzeGluten(ingredientsRaw = "") {
     };
   }
 
-  // 4️⃣ POZİTİF ÜRETİCİ BEYANI
-  if (SAFE_TERMS.some(term => text.includes(term))) {
+  // 4️⃣ POZİTİF ÜRETİCİ BEYANI (ÜRÜN ADI + İÇERİK)
+  if (SAFE_TERMS.some(term => combinedText.includes(term))) {
     return {
       status: "safe",
-      reason: "Etikette glutensiz / çölyak için uygun ibaresi var",
+      reason: "Üretici ürünü glutensiz olarak beyan etmektedir",
       warnings: allergenWarnings,
       claimsGlutenFree: true
     };
   }
 
-  // 5️⃣ HİÇBİR ŞEY YOKSA
+  // 5️⃣ HİÇBİR ŞEY YOK
   return {
     status: "unknown",
     reason: "Gluten durumu net değil",
