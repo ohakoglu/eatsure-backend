@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-
+const { findCertificationsForProduct } = require("./certifications");
 const { fetchProductByBarcode } = require("./openFoodFacts");
 const { analyzeGluten } = require("./glutenAnalyzer");
 const { decideGlutenStatus } = require("./decisionEngine");
@@ -26,11 +26,17 @@ app.get("/scan/:barcode", async (req, res) => {
 
     const product = data.product;
     const analysis = analyzeGluten(product.ingredients_text);
+const certifications = findCertificationsForProduct({
+  brand: product.brands,
+  productFamily: product.categories || ""
+});
+
 const decision = decideGlutenStatus({
-  certification: null, // şimdilik yok, birazdan ekleyeceğiz
+  certifications,
   ingredientAnalysis: analysis,
   manufacturerClaim: analysis.claimsGlutenFree === true
 });
+    
     res.json({
       barcode,
       name: product.product_name || "İsimsiz Ürün",
