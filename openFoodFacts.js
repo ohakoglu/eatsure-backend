@@ -1,3 +1,5 @@
+console.log(">>> OPENFOODFACTS LOADED <<<");
+
 async function fetchProductByBarcode(barcode) {
   const url = `https://world.openfoodfacts.org/api/v0/product/${barcode}.json`;
 
