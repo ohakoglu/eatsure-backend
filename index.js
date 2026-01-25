@@ -15,9 +15,8 @@ app.get("/scan/:barcode", async (req, res) => {
   try {
     const { barcode } = req.params;
 
-    // 🔥 Lazy require – doğru yerde, tek kez
+    // OpenFoodFacts API
     const { fetchProductByBarcode } = require("./openFoodFacts");
-
     const data = await fetchProductByBarcode(barcode);
 
     if (data.status !== 1) {
@@ -29,7 +28,12 @@ app.get("/scan/:barcode", async (req, res) => {
     }
 
     const product = data.product;
-    const analysis = analyzeGluten(product.ingredients_text);
+
+    // 🔥 ÖNEMLİ: ürün adı + içerik birlikte analiz ediliyor
+    const analysis = analyzeGluten({
+      ingredients: product.ingredients_text,
+      productName: product.product_name
+    });
 
     const normalizedBrand = product.brands
       ? product.brands.split(",")[0].trim()
