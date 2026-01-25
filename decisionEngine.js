@@ -1,5 +1,5 @@
 /**
- * Decision Engine v2.1
+ * Decision Engine v2.2
  * Handles certifications, conflicts, ingredient risks,
  * and explicit manufacturer gluten-free declarations.
  */
@@ -24,12 +24,8 @@ function decideGlutenStatus({
     const notes = [];
 
     if (suspendedCerts.length > 0) {
-      const suspendedNames = suspendedCerts
-        .map((c) => c.certifier)
-        .join(", ");
-
       notes.push(
-        `Bazı sertifikalar askıda veya iptal edilmiş durumda: ${suspendedNames}.`
+        "Bazı sertifikalar askıya alınmış veya iptal edilmiş olabilir. Detaylar sertifikasyon sayfasında görülebilir."
       );
     }
 
@@ -37,7 +33,7 @@ function decideGlutenStatus({
       status: "safe",
       level: "certified",
       reason: "Ürün en az bir geçerli glutensiz sertifikasına sahiptir.",
-      sources: activeCerts.map((c) => c.certifier),
+      sources: ["certification"],
       notes
     };
   }
@@ -48,8 +44,8 @@ function decideGlutenStatus({
       status: "unsafe",
       level: "certification_suspended",
       reason:
-        "Ürünün glutensiz sertifikaları askıya alınmış veya iptal edilmiştir.",
-      sources: suspendedCerts.map((c) => c.certifier)
+        "Ürüne ait glutensiz sertifikaların geçerliliği askıya alınmış veya iptal edilmiş olabilir.",
+      sources: ["certification"]
     };
   }
 
@@ -64,14 +60,14 @@ function decideGlutenStatus({
     };
   }
 
-  // --- MANUFACTURER DECLARATION (NO CERTIFICATION) ---
+  // --- MANUFACTURER DECLARATION (NO CERTIFICATION FOUND) ---
 
   if (manufacturerClaim === true) {
     return {
       status: "declared_gluten_free",
       level: "manufacturer_claim",
       reason:
-        "Üretici ürünü glutensiz olarak beyan etmektedir ancak bağımsız bir glutensiz sertifikasına sahip değildir.",
+        "Üretici ürünü glutensiz olarak beyan etmektedir. Ancak şu anda taranan sertifikasyon kaynaklarında bu ürüne ait doğrulanmış bir sertifika bilgisi yer almamaktadır.",
       sources: ["manufacturer"]
     };
   }
