@@ -1,7 +1,8 @@
 const express = require("express");
 const cors = require("cors");
 const { findCertificationsForProduct } = require("./certifications");
-const { fetchProductByBarcode } = require("./openFoodFacts");
+const openFoodFacts = require("./openFoodFacts");
+const fetchProductByBarcode = openFoodFacts.fetchProductByBarcode;
 const { analyzeGluten } = require("./glutenAnalyzer");
 const { decideGlutenStatus } = require("./decisionEngine");
 const app = express();
