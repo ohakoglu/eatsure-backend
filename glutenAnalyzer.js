@@ -35,7 +35,7 @@ const GLUTEN_RISK_PATTERNS = [
   /produced in a facility.*gluten/
 ];
 
-// 4️⃣ POZİTİF (GÜVENLİ) BEYANLAR
+// 4️⃣ POZİTİF (ÜRETİCİ) BEYANLAR
 const SAFE_TERMS = [
   // Türkçe
   "glutensiz",
@@ -44,7 +44,7 @@ const SAFE_TERMS = [
   "çölyak hastaları için uygundur",
   "çölyaklara uygundur",
 
-  // English – gluten free (etiket gerçekleri + yazım hataları)
+  // English
   "gluten free",
   "gluten-free",
   "glutene free",
@@ -70,7 +70,7 @@ const SAFE_TERMS = [
   "suitable for coeliacs"
 ];
 
-// 5️⃣ DİĞER ALERJENLER (çölyak sonucunu ETKİLEMEZ)
+// 5️⃣ DİĞER ALERJENLER (bilgi amaçlı)
 const OTHER_ALLERGENS = [
   "soy",
   "soya",
@@ -104,21 +104,24 @@ function analyzeGluten(ingredientsRaw = "") {
     return {
       status: "unknown",
       reason: "İçerik bilgisi bulunamadı",
-      warnings: []
+      warnings: [],
+      claimsGlutenFree: false
     };
   }
 
   const text = normalizeText(ingredientsRaw);
 
-  // Diğer alerjenleri bilgi amaçlı topla
-  const allergenWarnings = OTHER_ALLERGENS.filter(a => text.includes(a));
+  const allergenWarnings = OTHER_ALLERGENS.filter(a =>
+    text.includes(a)
+  );
 
-  // 1️⃣ AÇIK OLUMSUZLUK (en üst öncelik)
-  if (NEGATIVE_PATTERNS.some(pattern => pattern.test(text))) {
+  // 1️⃣ AÇIK OLUMSUZLUK
+  if (NEGATIVE_PATTERNS.some(p => p.test(text))) {
     return {
       status: "unsafe",
       reason: "Üretici çölyak için güvenli olmadığını belirtmiş",
-      warnings: allergenWarnings
+      warnings: allergenWarnings,
+      claimsGlutenFree: false
     };
   }
 
@@ -127,25 +130,28 @@ function analyzeGluten(ingredientsRaw = "") {
     return {
       status: "unsafe",
       reason: "Kesin gluten içeren bileşen bulundu",
-      warnings: allergenWarnings
+      warnings: allergenWarnings,
+      claimsGlutenFree: false
     };
   }
 
-  // 3️⃣ GLUTENLE İLGİLİ ÇAPRAZ BULAŞ
-  if (GLUTEN_RISK_PATTERNS.some(pattern => pattern.test(text))) {
+  // 3️⃣ GLUTEN ÇAPRAZ BULAŞ
+  if (GLUTEN_RISK_PATTERNS.some(p => p.test(text))) {
     return {
       status: "risky",
       reason: "Etikette glutenle ilgili çapraz bulaş uyarısı var",
-      warnings: allergenWarnings
+      warnings: allergenWarnings,
+      claimsGlutenFree: false
     };
   }
 
-  // 4️⃣ POZİTİF BEYAN
+  // 4️⃣ POZİTİF ÜRETİCİ BEYANI
   if (SAFE_TERMS.some(term => text.includes(term))) {
     return {
       status: "safe",
       reason: "Etikette glutensiz / çölyak için uygun ibaresi var",
-      warnings: allergenWarnings
+      warnings: allergenWarnings,
+      claimsGlutenFree: true
     };
   }
 
@@ -153,7 +159,8 @@ function analyzeGluten(ingredientsRaw = "") {
   return {
     status: "unknown",
     reason: "Gluten durumu net değil",
-    warnings: allergenWarnings
+    warnings: allergenWarnings,
+    claimsGlutenFree: false
   };
 }
 
