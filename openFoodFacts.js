@@ -1,12 +1,12 @@
+const axios = require("axios");
+
 console.log(">>> OPENFOODFACTS LOADED <<<");
 
 async function fetchProductByBarcode(barcode) {
   const url = `https://world.openfoodfacts.org/api/v0/product/${barcode}.json`;
 
-  const response = await fetch(url);
-  const data = await response.json();
-
-  return data;
+  const response = await axios.get(url);
+  return response.data;
 }
 
 module.exports = {
