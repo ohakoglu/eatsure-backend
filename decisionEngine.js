@@ -1,7 +1,7 @@
 /**
- * Decision Engine v2
- * Handles multiple certifications, conflicts, and produces
- * a single clear gluten safety decision.
+ * Decision Engine v2.1
+ * Handles certifications, conflicts, ingredient risks,
+ * and explicit manufacturer gluten-free declarations.
  */
 
 function decideGlutenStatus({
@@ -19,7 +19,7 @@ function decideGlutenStatus({
     (c) => c.status === "suspended" || c.status === "revoked"
   );
 
-  // 1️⃣ At least one ACTIVE certification → SAFE
+  // 1️⃣ At least one ACTIVE certification → SAFE (CERTIFIED)
   if (activeCerts.length > 0) {
     const notes = [];
 
@@ -47,14 +47,15 @@ function decideGlutenStatus({
     return {
       status: "unsafe",
       level: "certification_suspended",
-      reason: "Ürünün glutensiz sertifikaları askıya alınmış veya iptal edilmiştir.",
+      reason:
+        "Ürünün glutensiz sertifikaları askıya alınmış veya iptal edilmiştir.",
       sources: suspendedCerts.map((c) => c.certifier)
     };
   }
 
   // --- INGREDIENT ANALYSIS ---
 
-  if (ingredientAnalysis.containsGluten === true) {
+  if (ingredientAnalysis?.containsGluten === true) {
     return {
       status: "unsafe",
       level: "ingredient_risk",
@@ -63,14 +64,14 @@ function decideGlutenStatus({
     };
   }
 
-  // --- MANUFACTURER CLAIM ---
+  // --- MANUFACTURER DECLARATION (NO CERTIFICATION) ---
 
   if (manufacturerClaim === true) {
     return {
-      status: "likely_safe",
+      status: "declared_gluten_free",
       level: "manufacturer_claim",
       reason:
-        "Üretici ürünü glutensiz olarak beyan etmektedir ancak sertifika bulunmamaktadır.",
+        "Üretici ürünü glutensiz olarak beyan etmektedir ancak bağımsız bir glutensiz sertifikasına sahip değildir.",
       sources: ["manufacturer"]
     };
   }
