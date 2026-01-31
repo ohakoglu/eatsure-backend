@@ -1,4 +1,4 @@
-const gfco = require("./gfco.json");
+const gfcoData = require("./gfco.json");
 
 /**
  * Find matching certifications for a given product
@@ -7,21 +7,28 @@ const gfco = require("./gfco.json");
 function findCertificationsForProduct({ brand, productFamily }) {
   const matches = [];
 
-  for (const cert of gfco) {
+  // 🟢 Yeni veri modeline uygun: entries array
+  const entries = gfcoData.entries || [];
+
+  for (const entry of entries) {
     const brandMatch =
-      cert.scope.brand &&
+      entry.brand_normalized &&
       brand &&
-      cert.scope.brand.toLowerCase() === brand.toLowerCase();
+      entry.brand_normalized.toLowerCase() === brand.toLowerCase();
 
     const familyMatch =
-      cert.scope.product_family &&
+      entry.product_family &&
       productFamily &&
       productFamily.toLowerCase().includes(
-        cert.scope.product_family.toLowerCase()
+        entry.product_family.toLowerCase()
       );
 
     if (brandMatch || familyMatch) {
-      matches.push(cert);
+      matches.push({
+        certifier: gfcoData.certifier.id,
+        status: entry.status,
+        snapshot_date: gfcoData.snapshot.snapshot_date
+      });
     }
   }
 
