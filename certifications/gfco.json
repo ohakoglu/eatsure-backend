@@ -1,83 +1,29 @@
-[
-  {
-    "id": "gfco-schar-bakery-001",
-    "certifier": "GFCO",
-    "scope": {
-      "brand": "Schär",
-      "manufacturer": "Dr. Schär AG",
-      "facility": null,
-      "product_family": "Bakery products"
-    },
-    "status": "active",
-    "confidence": "high",
-    "source": {
-      "type": "public-list",
-      "url": "https://gfco.org/",
-      "reference_note": "GFCO certified products list"
-    },
-    "dates": {
-      "valid_from": "2024-03-01",
-      "last_verified": "2026-01-25"
-    },
-    "audit": {
-      "created_at": "2026-01-25",
-      "created_by": "admin",
-      "updated_at": null,
-      "updated_by": null
-    }
+{
+  "certifier": {
+    "id": "GFCO",
+    "name": "Gluten-Free Certification Organization",
+    "region": "US",
+    "official_url": "https://gfco.org",
+    "public_list_url": "https://gfco.org/certified-products/",
+    "license_note": "Publicly listed certification data. Referenced for informational purposes.",
+    "last_checked_at": "2025-03-01"
   },
-  {
-    "id": "gfco-generic-oats-002",
-    "certifier": "GFCO",
-    "scope": {
-      "brand": "Generic Oats Co",
-      "manufacturer": "Generic Foods Ltd",
-      "facility": "PL-OT-778",
-      "product_family": "Oat based products"
-    },
-    "status": "suspended",
-    "confidence": "medium",
-    "source": {
-      "type": "official-notice",
-      "url": "https://gfco.org/recalls",
-      "reference_note": "Temporary suspension due to cross-contamination risk"
-    },
-    "dates": {
-      "valid_from": "2023-06-10",
-      "last_verified": "2025-11-02"
-    },
-    "audit": {
-      "created_at": "2025-11-02",
-      "created_by": "editor_1",
-      "updated_at": "2025-11-02",
-      "updated_by": "reviewer_1"
-    }
+  "snapshot": {
+    "snapshot_id": "GFCO_2025_03_01",
+    "snapshot_date": "2025-03-01",
+    "source_url": "https://gfco.org/certified-products/",
+    "notes": "Reference snapshot used for MVP development"
   },
-  {
-    "id": "gfco-rice-snacks-003",
-    "certifier": "GFCO",
-    "scope": {
-      "brand": "RiceJoy",
-      "manufacturer": "RiceJoy Foods",
-      "facility": null,
-      "product_family": "Rice snacks"
-    },
-    "status": "active",
-    "confidence": "high",
-    "source": {
-      "type": "public-list",
-      "url": "https://gfco.org/",
-      "reference_note": "GFCO certified products list"
-    },
-    "dates": {
-      "valid_from": "2022-09-15",
-      "last_verified": "2026-01-10"
-    },
-    "audit": {
-      "created_at": "2026-01-10",
-      "created_by": "admin",
-      "updated_at": null,
-      "updated_by": null
+  "entries": [
+    {
+      "brand_name": "Dr. Schär",
+      "brand_normalized": "schar",
+      "product_name": null,
+      "product_family": "bread",
+      "status": "active",
+      "status_note": null,
+      "valid_from": null,
+      "valid_until": null
     }
-  }
-]
+  ]
+}
