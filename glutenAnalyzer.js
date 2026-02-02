@@ -1,5 +1,5 @@
 // ===================================
-// Gluten Analysis Engine – FINAL v1.1
+// Gluten Analysis Engine – FINAL v1.2
 // Gluten-focused, allergy-aware, UX-safe
 // ===================================
 
@@ -25,7 +25,7 @@ const DEFINITE_GLUTEN = [
   "barley",
   "rye",
   "semolina",
-  "frumento" // İtalyanca
+  "frumento"
 ];
 
 // 3️⃣ GLUTEN ÇAPRAZ BULAŞ RİSKİ
@@ -36,46 +36,28 @@ const GLUTEN_RISK_PATTERNS = [
   /produced in a facility.*gluten/
 ];
 
-// 4️⃣ POZİTİF (ÜRETİCİ) BEYANLAR – MULTI-LANGUAGE
+// 4️⃣ POZİTİF (ÜRETİCİ) BEYANLAR – CANONICAL
 const SAFE_TERMS = [
-  // Türkçe
   "glutensiz",
-  "gluten içermez",
+  "gluten icermez",
   "glutensizdir",
-  "çölyak hastaları için uygundur",
-  "çölyaklara uygundur",
-
-  // English
   "gluten free",
-  "gluten-free",
   "free from gluten",
   "without gluten",
-
-  // Italian
-  "senza glutine",
-  "senza frumento",
-
-  // Spanish
-  "sin gluten",
-
-  // Portuguese
-  "sem gluten",
-  "sem glúten",
-
-  // Gluten intolerance
   "gluten intolerance",
   "for people with gluten intolerance",
   "designed for people with gluten intolerance",
-
-  // Celiac-safe
   "safe for celiac",
   "safe for coeliac",
   "suitable for celiac",
   "suitable for coeliac",
-  "suitable for coeliacs"
+  "suitable for coeliacs",
+  "senza glutine",
+  "sin gluten",
+  "sem gluten"
 ];
 
-// 5️⃣ DİĞER ALERJENLER (bilgi amaçlı)
+// 5️⃣ DİĞER ALERJENLER
 const OTHER_ALLERGENS = [
   "soy",
   "soya",
@@ -91,11 +73,19 @@ const OTHER_ALLERGENS = [
 ];
 
 // -------------------------------
-// Yardımcı
+// NORMALIZATION (KRİTİK KISIM)
 // -------------------------------
 function normalizeText(text = "") {
   return text
     .toLowerCase()
+    // aksanları temizle
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    // sık görülen spelling varyasyonları
+    .replace(/glutene/g, "gluten")
+    .replace(/glúten/g, "gluten")
+    .replace(/gluten[e]?\s*intolerance/g, "gluten intolerance")
+    // whitespace temizliği
     .replace(/[\n\r]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -126,8 +116,6 @@ function analyzeGluten(input = {}) {
 
   const ingredientsText = normalizeText(ingredientsRaw);
   const productNameText = normalizeText(productNameRaw);
-
-  // 🔑 KRİTİK: ÜRÜN ADI + İÇERİK BİRLİKTE
   const combinedText = `${productNameText} ${ingredientsText}`;
 
   const allergenWarnings = OTHER_ALLERGENS.filter(a =>
