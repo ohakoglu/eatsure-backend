@@ -1,5 +1,5 @@
 // ===================================
-// Gluten Analysis Engine – FINAL
+// Gluten Analysis Engine – FINAL v1.1
 // Gluten-focused, allergy-aware, UX-safe
 // ===================================
 
@@ -24,7 +24,8 @@ const DEFINITE_GLUTEN = [
   "wheat",
   "barley",
   "rye",
-  "semolina"
+  "semolina",
+  "frumento" // İtalyanca
 ];
 
 // 3️⃣ GLUTEN ÇAPRAZ BULAŞ RİSKİ
@@ -35,38 +36,46 @@ const GLUTEN_RISK_PATTERNS = [
   /produced in a facility.*gluten/
 ];
 
-// 4️⃣ POZİTİF (ÜRETİCİ) BEYANLAR
+// 4️⃣ POZİTİF (ÜRETİCİ) BEYANLAR – MULTI-LANGUAGE
 const SAFE_TERMS = [
+  // Türkçe
   "glutensiz",
   "gluten içermez",
   "glutensizdir",
   "çölyak hastaları için uygundur",
   "çölyaklara uygundur",
 
+  // English
   "gluten free",
   "gluten-free",
-  "glutene free",
-  "glutene-free",
   "free from gluten",
   "without gluten",
 
-  "gluten intolerance",
-  "glutene intolerance",
-  "for people with gluten intolerance",
-  "for people with glutene intolerance",
-  "designed for people with gluten intolerance",
-  "designed for people with glutene intolerance",
+  // Italian
+  "senza glutine",
+  "senza frumento",
 
+  // Spanish
+  "sin gluten",
+
+  // Portuguese
+  "sem gluten",
+  "sem glúten",
+
+  // Gluten intolerance
+  "gluten intolerance",
+  "for people with gluten intolerance",
+  "designed for people with gluten intolerance",
+
+  // Celiac-safe
   "safe for celiac",
   "safe for coeliac",
   "suitable for celiac",
   "suitable for coeliac",
-  "for people with celiac disease",
-  "for people with coeliac disease",
   "suitable for coeliacs"
 ];
 
-// 5️⃣ DİĞER ALERJENLER
+// 5️⃣ DİĞER ALERJENLER (bilgi amaçlı)
 const OTHER_ALLERGENS = [
   "soy",
   "soya",
@@ -109,12 +118,16 @@ function analyzeGluten(input = {}) {
       status: "unknown",
       reason: "İçerik bilgisi bulunamadı",
       warnings: [],
-      claimsGlutenFree: false
+      claimsGlutenFree: false,
+      containsGluten: false,
+      hasCrossContaminationRisk: false
     };
   }
 
   const ingredientsText = normalizeText(ingredientsRaw);
   const productNameText = normalizeText(productNameRaw);
+
+  // 🔑 KRİTİK: ÜRÜN ADI + İÇERİK BİRLİKTE
   const combinedText = `${productNameText} ${ingredientsText}`;
 
   const allergenWarnings = OTHER_ALLERGENS.filter(a =>
@@ -127,7 +140,9 @@ function analyzeGluten(input = {}) {
       status: "unsafe",
       reason: "Üretici çölyak için güvenli olmadığını belirtmiş",
       warnings: allergenWarnings,
-      claimsGlutenFree: false
+      claimsGlutenFree: false,
+      containsGluten: true,
+      hasCrossContaminationRisk: false
     };
   }
 
@@ -137,7 +152,9 @@ function analyzeGluten(input = {}) {
       status: "unsafe",
       reason: "Kesin gluten içeren bileşen bulundu",
       warnings: allergenWarnings,
-      claimsGlutenFree: false
+      claimsGlutenFree: false,
+      containsGluten: true,
+      hasCrossContaminationRisk: false
     };
   }
 
@@ -147,7 +164,9 @@ function analyzeGluten(input = {}) {
       status: "risky",
       reason: "Etikette glutenle ilgili çapraz bulaş uyarısı var",
       warnings: allergenWarnings,
-      claimsGlutenFree: false
+      claimsGlutenFree: false,
+      containsGluten: false,
+      hasCrossContaminationRisk: true
     };
   }
 
@@ -157,7 +176,9 @@ function analyzeGluten(input = {}) {
       status: "safe",
       reason: "Üretici ürünü glutensiz olarak beyan etmektedir",
       warnings: allergenWarnings,
-      claimsGlutenFree: true
+      claimsGlutenFree: true,
+      containsGluten: false,
+      hasCrossContaminationRisk: false
     };
   }
 
@@ -166,7 +187,9 @@ function analyzeGluten(input = {}) {
     status: "unknown",
     reason: "Gluten durumu net değil",
     warnings: allergenWarnings,
-    claimsGlutenFree: false
+    claimsGlutenFree: false,
+    containsGluten: false,
+    hasCrossContaminationRisk: false
   };
 }
 
