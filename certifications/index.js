@@ -14,7 +14,9 @@ function normalizeBrand(value = "") {
 
 /**
  * Find matching certifications for a given product
- * Brand-first, scope-aware, MVP-safe
+ * OPTION A:
+ * - Brand match is sufficient
+ * - Product family only affects scope, NOT eligibility
  */
 function findCertificationsForProduct({ brand, productFamily }) {
   const matches = [];
@@ -35,23 +37,25 @@ function findCertificationsForProduct({ brand, productFamily }) {
       continue;
     }
 
-    // 2️⃣ Ürün ailesi varsa daralt
+    // 2️⃣ Scope belirleme (bilgi amaçlı)
+    let scope = "brand";
+
     if (
       entry.product_family &&
       productFamily &&
-      !productFamily
+      productFamily
         .toLowerCase()
         .includes(entry.product_family.toLowerCase())
     ) {
-      continue;
+      scope = "brand+family";
     }
 
-    // 3️⃣ Geçerli eşleşme
+    // 3️⃣ Sertifika geçerli
     matches.push({
       certifier: gfcoData.certifier.id,
       certifier_name: gfcoData.certifier.name,
       status: entry.status,
-      scope: entry.product_family ? "brand+family" : "brand",
+      scope,
       snapshot_date: gfcoData.snapshot.snapshot_date
     });
   }
