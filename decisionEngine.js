@@ -1,7 +1,6 @@
 /**
- * Decision Engine v2.2
- * Handles certifications, conflicts, ingredient risks,
- * and explicit manufacturer gluten-free declarations.
+ * Decision Engine v2.3 – FINAL
+ * Certification-first, evidence-aware, UX-honest
  */
 
 function decideGlutenStatus({
@@ -11,21 +10,33 @@ function decideGlutenStatus({
 }) {
   // --- CERTIFICATION ANALYSIS ---
 
-  const activeCerts = certifications.filter(
-    (c) => c.status === "active"
-  );
-
+  const activeCerts = certifications.filter(c => c.status === "active");
   const suspendedCerts = certifications.filter(
-    (c) => c.status === "suspended" || c.status === "revoked"
+    c => c.status === "suspended" || c.status === "revoked"
   );
 
-  // 1️⃣ At least one ACTIVE certification → SAFE (CERTIFIED)
+  // 1️⃣ ACTIVE CERTIFICATION → SAFE
   if (activeCerts.length > 0) {
+    const sources = activeCerts.map(c => c.certifier);
+    const scopes = activeCerts.map(c => c.scope);
+
     const notes = [];
+
+    if (scopes.includes("brand")) {
+      notes.push(
+        "Bu değerlendirme, markaya ait sertifikasyon bilgilerine dayanmaktadır."
+      );
+    }
+
+    if (scopes.includes("brand+family")) {
+      notes.push(
+        "Sertifikasyon belirli ürün ailesi kapsamında geçerlidir."
+      );
+    }
 
     if (suspendedCerts.length > 0) {
       notes.push(
-        "Bazı sertifikalar askıya alınmış veya iptal edilmiş olabilir. Detaylar sertifikasyon sayfasında görülebilir."
+        "Bazı sertifikaların durumu askıya alınmış veya iptal edilmiş olabilir. Detaylar sertifikasyon kaynağında görülebilir."
       );
     }
 
@@ -33,34 +44,34 @@ function decideGlutenStatus({
       status: "safe",
       level: "certified",
       reason: "Ürün en az bir geçerli glutensiz sertifikasına sahiptir.",
-      sources: ["certification"],
+      sources,
       notes
     };
   }
 
-  // 2️⃣ No active certs, but suspended/revoked exist → UNSAFE
+  // 2️⃣ CERTIFICATION SUSPENDED / REVOKED
   if (activeCerts.length === 0 && suspendedCerts.length > 0) {
     return {
       status: "unsafe",
       level: "certification_suspended",
       reason:
-        "Ürüne ait glutensiz sertifikaların geçerliliği askıya alınmış veya iptal edilmiş olabilir.",
-      sources: ["certification"]
+        "Ürüne ait glutensiz sertifikaların geçerliliği askıya alınmış veya iptal edilmiştir.",
+      sources: suspendedCerts.map(c => c.certifier)
     };
   }
 
   // --- INGREDIENT ANALYSIS ---
 
-  if (ingredientAnalysis?.containsGluten === true) {
+  if (ingredientAnalysis?.status === "unsafe") {
     return {
       status: "unsafe",
       level: "ingredient_risk",
-      reason: "İçerikte gluten veya gluten içeren bileşenler bulunmaktadır.",
+      reason: ingredientAnalysis.reason,
       sources: ["ingredients"]
     };
   }
 
-  // --- MANUFACTURER DECLARATION (NO CERTIFICATION FOUND) ---
+  // --- MANUFACTURER DECLARATION (NO CERT FOUND) ---
 
   if (manufacturerClaim === true) {
     return {
