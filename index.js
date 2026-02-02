@@ -29,11 +29,8 @@ app.get("/scan/:barcode", async (req, res) => {
 
     const product = data.product;
 
-    // 🔥 ÖNEMLİ: ürün adı + içerik birlikte analiz ediliyor
-    const analysis = analyzeGluten({
-      ingredients: product.ingredients_text,
-      productName: product.product_name
-    });
+    // ✅ İçerik metniyle gluten analizi
+    const analysis = analyzeGluten(product.ingredients_text);
 
     const normalizedBrand = product.brands
       ? product.brands.split(",")[0].trim()
