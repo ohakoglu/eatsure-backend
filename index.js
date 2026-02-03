@@ -11,6 +11,14 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
+/**
+ * 🔥 HEALTH CHECK (Render warm-up için)
+ * Bu endpoint hiçbir iş yapmaz, sadece server’ı uyanık tutar
+ */
+app.get("/health", (req, res) => {
+  res.status(200).send("ok");
+});
+
 app.get("/scan/:barcode", async (req, res) => {
   try {
     const { barcode } = req.params;
