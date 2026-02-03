@@ -4,6 +4,7 @@ const cors = require("cors");
 const { findCertificationsForProduct } = require("./certifications");
 const { analyzeGluten } = require("./glutenAnalyzer");
 const { decideGlutenStatus } = require("./decisionEngine");
+const { fetchProductByBarcode } = require("./openFoodFacts");
 
 const app = express();
 app.use(cors());
@@ -12,64 +13,90 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 /**
- * 🔥 HEALTH CHECK (Render warm-up için)
- * Bu endpoint hiçbir iş yapmaz, sadece server’ı uyanık tutar
+ * 🔥 HEALTH CHECK
  */
 app.get("/health", (req, res) => {
   res.status(200).send("ok");
 });
 
 app.get("/scan/:barcode", async (req, res) => {
+  const { barcode } = req.params;
+
+  let offData;
+  let offUnavailable = false;
+
   try {
-    const { barcode } = req.params;
+    offData = await fetchProductByBarcode(barcode);
 
-    // OpenFoodFacts API
-    const { fetchProductByBarcode } = require("./openFoodFacts");
-    const data = await fetchProductByBarcode(barcode);
-
-    if (data.status !== 1) {
-      return res.json({
-        barcode,
-        status: "unknown",
-        message: "Ürün veritabanında bulunamadı",
-      });
+    // OFF erişilemedi ama bu BİR HATA DEĞİL
+    if (offData.status !== 1) {
+      offUnavailable = true;
     }
+  } catch {
+    offUnavailable = true;
+  }
 
-    const product = data.product;
+  let product = null;
 
-    // ✅ İçerik metniyle gluten analizi
-    const analysis = analyzeGluten(product.ingredients_text);
+  if (!offUnavailable) {
+    product = offData.product;
+  }
 
-    const normalizedBrand = product.brands
-      ? product.brands.split(",")[0].trim()
-      : null;
+  // 🔹 Marka bilgisi (OFF yoksa OFF’tan, yoksa null)
+  const normalizedBrand = product?.brands
+    ? product.brands.split(",")[0].trim()
+    : null;
 
-    const certifications = findCertificationsForProduct({
-      brand: normalizedBrand,
-      productFamily: product.categories || ""
-    });
+  // 🔹 Sertifikasyon HER ZAMAN çalışır
+  const certifications = findCertificationsForProduct({
+    brand: normalizedBrand,
+    productFamily: product?.categories || ""
+  });
 
-    const decision = decideGlutenStatus({
-      certifications,
-      ingredientAnalysis: analysis,
-      manufacturerClaim: analysis.claimsGlutenFree === true
-    });
+  // 🔹 İçerik analizi SADECE OFF varsa yapılır
+  const analysis = product?.ingredients_text
+    ? analyzeGluten({
+        ingredients: product.ingredients_text,
+        productName: product.product_name || ""
+      })
+    : null;
 
-    res.json({
+  const decision = decideGlutenStatus({
+    certifications,
+    ingredientAnalysis: analysis,
+    manufacturerClaim: analysis?.claimsGlutenFree === true
+  });
+
+  // ❌ Ne OFF var ne sertifika → gerçek bilinmezlik
+  if (offUnavailable && certifications.length === 0) {
+    return res.json({
       barcode,
-      name: product.product_name || "İsimsiz Ürün",
+      name: "Bilinmiyor",
       brand: normalizedBrand || "Bilinmiyor",
-      ingredients: product.ingredients_text || null,
-      analysis,
-      decision
-    });
-
-  } catch (error) {
-    res.status(500).json({
-      error: "Sunucu hatası",
-      detail: error.message,
+      ingredients: null,
+      analysis: null,
+      decision: {
+        status: "unknown",
+        level: "insufficient_data",
+        reason:
+          "Ürün veritabanında bulunamadı ve sertifikasyon bilgisi mevcut değil.",
+        sources: []
+      }
     });
   }
+
+  // ✅ NORMAL / PARTIAL CEVAP
+  res.json({
+    barcode,
+    name: product?.product_name || "Bilinmiyor",
+    brand: normalizedBrand || "Bilinmiyor",
+    ingredients: product?.ingredients_text || null,
+    analysis,
+    decision,
+    meta: {
+      openFoodFactsAvailable: !offUnavailable
+    }
+  });
 });
 
 app.listen(PORT, () => {
