@@ -7,13 +7,15 @@ async function fetchProductByBarcode(barcode) {
 
   try {
     const response = await axios.get(url, {
-      timeout: 8000 // ⏱ 8 saniye
+      timeout: 8000, // ⏱️ 8 saniye
+      validateStatus: () => true // 4xx / 5xx axios'u patlatmasın
     });
 
-    // OFF düzgün cevap vermediyse
-    if (!response || !response.data) {
+    // OFF cevap verdi ama ürün yok
+    if (!response.data) {
       return {
         status: 0,
+        error: "OFF_EMPTY_RESPONSE",
         message: "OpenFoodFacts boş cevap döndü"
       };
     }
@@ -21,11 +23,26 @@ async function fetchProductByBarcode(barcode) {
     return response.data;
 
   } catch (error) {
-    console.error("OFF ERROR:", error.message);
+    // 🔍 Hata türünü AYIRIYORUZ
+    let errorType = "OFF_UNKNOWN_ERROR";
 
-    // ⛑ Kontrollü fallback
+    if (error.code === "ECONNABORTED") {
+      errorType = "OFF_TIMEOUT";
+    } else if (error.code === "ENOTFOUND") {
+      errorType = "OFF_DNS_ERROR";
+    } else if (error.code === "ECONNRESET") {
+      errorType = "OFF_CONNECTION_RESET";
+    }
+
+    console.error("OFF ERROR:", {
+      type: errorType,
+      message: error.message
+    });
+
+    // ❗ THROW YOK — kontrollü dönüş
     return {
       status: 0,
+      error: errorType,
       message: "OpenFoodFacts erişilemedi"
     };
   }
