@@ -20,16 +20,57 @@ app.get("/health", (req, res) => {
 });
 
 /**
+ * 🧪 OFF-TEST
+ * SADECE OpenFoodFacts test endpoint’i
+ * Hiçbir iş kuralı yok
+ */
+app.get("/off-test/:barcode", async (req, res) => {
+  const { barcode } = req.params;
+
+  try {
+    const offData = await fetchProductByBarcode(barcode);
+
+    // OFF cevap verdi ama ürün yok
+    if (offData.status !== 1) {
+      return res.json({
+        barcode,
+        offStatus: offData.status,
+        message: "OpenFoodFacts ürünü bulamadı",
+        raw: offData
+      });
+    }
+
+    const product = offData.product || {};
+
+    return res.json({
+      barcode,
+      offStatus: offData.status,
+      product: {
+        name: product.product_name || null,
+        brand: product.brands || null,
+        ingredients: product.ingredients_text || null,
+        categories: product.categories || null
+      }
+    });
+
+  } catch (error) {
+    return res.json({
+      barcode,
+      offStatus: "error",
+      message: "OpenFoodFacts çağrısı başarısız",
+      error: error.message
+    });
+  }
+});
+
+/**
  * 🧠 BİLİNEN GLUTENLİ ÜRÜNLER (LOCAL FALLBACK)
- * OFF yoksa ama bu barkodlardan biriyse → UNSAFE
  */
 const KNOWN_GLUTEN_BARCODES = {
-  // Buğday unu – Türkiye
   "8690570042017": {
     name: "Buğday Unu",
     brand: "Söke"
   },
-  // Makarna (wheat)
   "8690105000017": {
     name: "Spaghetti",
     brand: "Barilla"
@@ -58,18 +99,15 @@ app.get("/scan/:barcode", async (req, res) => {
     product = offData.product;
   }
 
-  // 🔹 Marka (OFF varsa al, yoksa null)
   const normalizedBrand = product?.brands
     ? product.brands.split(",")[0].trim()
     : null;
 
-  // 🔹 Sertifikasyon HER ZAMAN çalışır
   const certifications = findCertificationsForProduct({
     brand: normalizedBrand,
     productFamily: product?.categories || ""
   });
 
-  // 🔹 İçerik analizi SADECE OFF varsa
   const analysis = product?.ingredients_text
     ? analyzeGluten({
         ingredients: product.ingredients_text,
@@ -77,7 +115,6 @@ app.get("/scan/:barcode", async (req, res) => {
       })
     : null;
 
-  // 🔥 1️⃣ BİLİNEN GLUTEN FALLBACK
   if (offUnavailable && certifications.length === 0) {
     const known = KNOWN_GLUTEN_BARCODES[barcode];
 
@@ -101,7 +138,6 @@ app.get("/scan/:barcode", async (req, res) => {
       });
     }
 
-    // ❓ GERÇEK BİLİNMEZLİK
     return res.json({
       barcode,
       name: "Bilinmiyor",
@@ -118,14 +154,12 @@ app.get("/scan/:barcode", async (req, res) => {
     });
   }
 
-  // 🔹 Normal karar motoru
   const decision = decideGlutenStatus({
     certifications,
     ingredientAnalysis: analysis,
     manufacturerClaim: analysis?.claimsGlutenFree === true
   });
 
-  // ✅ NORMAL / PARTIAL CEVAP
   res.json({
     barcode,
     name: product?.product_name || "Bilinmiyor",
