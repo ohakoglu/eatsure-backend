@@ -99,15 +99,20 @@ app.get("/scan/:barcode", async (req, res) => {
     productFamily: product.categories || ""
   });
 
-  // 🔹 İçerik analizi SADECE içerik varsa
-  const analysis = product.ingredients_text
-    ? analyzeGluten({
-        ingredients: product.ingredients_text,
-        productName: productName || ""
-      })
-    : null;
+  /**
+   * 🔑 KRİTİK DÜZELTME
+   * İçerik YOKSA bile, ürün adı üzerinden gluten analizi yap
+   */
+  let analysis = null;
 
-  // 🔥 1️⃣ GERÇEK BİLİNMEZLİK
+  if (product.ingredients_text || productName) {
+    analysis = analyzeGluten({
+      ingredients: product.ingredients_text || "",
+      productName: productName || ""
+    });
+  }
+
+  // 🔥 GERÇEK BİLİNMEZLİK (ne OFF ne sertifika ne beyan)
   if (!offAvailable && !productName && certifications.length === 0) {
     const known = KNOWN_GLUTEN_BARCODES[barcode];
 
