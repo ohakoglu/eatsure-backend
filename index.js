@@ -19,6 +19,23 @@ app.get("/health", (req, res) => {
   res.status(200).send("ok");
 });
 
+/**
+ * 🧠 BİLİNEN GLUTENLİ ÜRÜNLER (LOCAL FALLBACK)
+ * OFF yoksa ama bu barkodlardan biriyse → UNSAFE
+ */
+const KNOWN_GLUTEN_BARCODES = {
+  // Buğday unu – Türkiye
+  "8690570042017": {
+    name: "Buğday Unu",
+    brand: "Söke"
+  },
+  // Makarna (wheat)
+  "8690105000017": {
+    name: "Spaghetti",
+    brand: "Barilla"
+  }
+};
+
 app.get("/scan/:barcode", async (req, res) => {
   const { barcode } = req.params;
 
@@ -28,7 +45,6 @@ app.get("/scan/:barcode", async (req, res) => {
   try {
     offData = await fetchProductByBarcode(barcode);
 
-    // OFF erişilemedi ama bu BİR HATA DEĞİL
     if (offData.status !== 1) {
       offUnavailable = true;
     }
@@ -42,7 +58,7 @@ app.get("/scan/:barcode", async (req, res) => {
     product = offData.product;
   }
 
-  // 🔹 Marka bilgisi (OFF yoksa OFF’tan, yoksa null)
+  // 🔹 Marka (OFF varsa al, yoksa null)
   const normalizedBrand = product?.brands
     ? product.brands.split(",")[0].trim()
     : null;
@@ -53,7 +69,7 @@ app.get("/scan/:barcode", async (req, res) => {
     productFamily: product?.categories || ""
   });
 
-  // 🔹 İçerik analizi SADECE OFF varsa yapılır
+  // 🔹 İçerik analizi SADECE OFF varsa
   const analysis = product?.ingredients_text
     ? analyzeGluten({
         ingredients: product.ingredients_text,
@@ -61,18 +77,35 @@ app.get("/scan/:barcode", async (req, res) => {
       })
     : null;
 
-  const decision = decideGlutenStatus({
-    certifications,
-    ingredientAnalysis: analysis,
-    manufacturerClaim: analysis?.claimsGlutenFree === true
-  });
-
-  // ❌ Ne OFF var ne sertifika → gerçek bilinmezlik
+  // 🔥 1️⃣ BİLİNEN GLUTEN FALLBACK
   if (offUnavailable && certifications.length === 0) {
+    const known = KNOWN_GLUTEN_BARCODES[barcode];
+
+    if (known) {
+      return res.json({
+        barcode,
+        name: known.name,
+        brand: known.brand,
+        ingredients: null,
+        analysis: {
+          status: "unsafe",
+          reason: "Bilinen gluten içeren üründür",
+          claimsGlutenFree: false
+        },
+        decision: {
+          status: "unsafe",
+          level: "known_gluten_product",
+          reason: "Bu ürün bilinen gluten içeren ürünler listesinde yer almaktadır.",
+          sources: ["local_fallback"]
+        }
+      });
+    }
+
+    // ❓ GERÇEK BİLİNMEZLİK
     return res.json({
       barcode,
       name: "Bilinmiyor",
-      brand: normalizedBrand || "Bilinmiyor",
+      brand: "Bilinmiyor",
       ingredients: null,
       analysis: null,
       decision: {
@@ -84,6 +117,13 @@ app.get("/scan/:barcode", async (req, res) => {
       }
     });
   }
+
+  // 🔹 Normal karar motoru
+  const decision = decideGlutenStatus({
+    certifications,
+    ingredientAnalysis: analysis,
+    manufacturerClaim: analysis?.claimsGlutenFree === true
+  });
 
   // ✅ NORMAL / PARTIAL CEVAP
   res.json({
