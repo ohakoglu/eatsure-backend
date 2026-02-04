@@ -21,8 +21,6 @@ app.get("/health", (req, res) => {
 
 /**
  * 🧪 OFF-TEST
- * SADECE OpenFoodFacts test endpoint’i
- * Hiçbir iş kuralı yok
  */
 app.get("/off-test/:barcode", async (req, res) => {
   const { barcode } = req.params;
@@ -30,7 +28,6 @@ app.get("/off-test/:barcode", async (req, res) => {
   try {
     const offData = await fetchProductByBarcode(barcode);
 
-    // OFF cevap verdi ama ürün yok
     if (offData.status !== 1) {
       return res.json({
         barcode,
@@ -52,7 +49,6 @@ app.get("/off-test/:barcode", async (req, res) => {
         categories: product.categories || null
       }
     });
-
   } catch (error) {
     return res.json({
       barcode,
@@ -80,42 +76,39 @@ const KNOWN_GLUTEN_BARCODES = {
 app.get("/scan/:barcode", async (req, res) => {
   const { barcode } = req.params;
 
-  let offData;
-  let offUnavailable = false;
+  let offData = null;
+  let offAvailable = true;
 
   try {
     offData = await fetchProductByBarcode(barcode);
-
-    if (offData.status !== 1) {
-      offUnavailable = true;
-    }
+    if (offData.status !== 1) offAvailable = false;
   } catch {
-    offUnavailable = true;
+    offAvailable = false;
   }
 
-  let product = null;
+  const product = offAvailable ? offData.product || {} : {};
 
-  if (!offUnavailable) {
-    product = offData.product;
-  }
-
-  const normalizedBrand = product?.brands
+  const productName = product.product_name || null;
+  const normalizedBrand = product.brands
     ? product.brands.split(",")[0].trim()
     : null;
 
+  // 🔹 Sertifikasyon HER ZAMAN çalışır
   const certifications = findCertificationsForProduct({
     brand: normalizedBrand,
-    productFamily: product?.categories || ""
+    productFamily: product.categories || ""
   });
 
-  const analysis = product?.ingredients_text
+  // 🔹 İçerik analizi SADECE içerik varsa
+  const analysis = product.ingredients_text
     ? analyzeGluten({
         ingredients: product.ingredients_text,
-        productName: product.product_name || ""
+        productName: productName || ""
       })
     : null;
 
-  if (offUnavailable && certifications.length === 0) {
+  // 🔥 1️⃣ GERÇEK BİLİNMEZLİK
+  if (!offAvailable && !productName && certifications.length === 0) {
     const known = KNOWN_GLUTEN_BARCODES[barcode];
 
     if (known) {
@@ -132,7 +125,8 @@ app.get("/scan/:barcode", async (req, res) => {
         decision: {
           status: "unsafe",
           level: "known_gluten_product",
-          reason: "Bu ürün bilinen gluten içeren ürünler listesinde yer almaktadır.",
+          reason:
+            "Bu ürün bilinen gluten içeren ürünler listesinde yer almaktadır.",
           sources: ["local_fallback"]
         }
       });
@@ -154,6 +148,7 @@ app.get("/scan/:barcode", async (req, res) => {
     });
   }
 
+  // 🔹 Karar motoru
   const decision = decideGlutenStatus({
     certifications,
     ingredientAnalysis: analysis,
@@ -162,13 +157,14 @@ app.get("/scan/:barcode", async (req, res) => {
 
   res.json({
     barcode,
-    name: product?.product_name || "Bilinmiyor",
+    name: productName || "Bilinmiyor",
     brand: normalizedBrand || "Bilinmiyor",
-    ingredients: product?.ingredients_text || null,
+    ingredients: product.ingredients_text || null,
     analysis,
     decision,
     meta: {
-      openFoodFactsAvailable: !offUnavailable
+      openFoodFactsAvailable: offAvailable,
+      hasIngredients: !!product.ingredients_text
     }
   });
 });
