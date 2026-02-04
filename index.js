@@ -100,8 +100,8 @@ app.get("/scan/:barcode", async (req, res) => {
   });
 
   /**
-   * 🔑 KRİTİK DÜZELTME
-   * İçerik YOKSA bile, ürün adı üzerinden gluten analizi yap
+   * 🔑 DÜZELTME
+   * İçerik YOKSA bile ürün adı üzerinden analiz yapılabilir
    */
   let analysis = null;
 
@@ -112,8 +112,11 @@ app.get("/scan/:barcode", async (req, res) => {
     });
   }
 
-  // 🔥 GERÇEK BİLİNMEZLİK (ne OFF ne sertifika ne beyan)
-  if (!offAvailable && !productName && certifications.length === 0) {
+  /**
+   * 🔥 GERÇEK BİLİNMEZLİK
+   * SADECE: OFF YOK + sertifika YOK
+   */
+  if (!offAvailable && certifications.length === 0) {
     const known = KNOWN_GLUTEN_BARCODES[barcode];
 
     if (known) {
