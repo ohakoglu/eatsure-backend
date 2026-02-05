@@ -75,6 +75,7 @@ const KNOWN_GLUTEN_BARCODES = {
 
 app.get("/scan/:barcode", async (req, res) => {
   const { barcode } = req.params;
+  const evaluatedAt = new Date().toISOString();
 
   let offData = null;
   let offAvailable = true;
@@ -100,8 +101,7 @@ app.get("/scan/:barcode", async (req, res) => {
   });
 
   /**
-   * 🔑 DÜZELTME
-   * İçerik YOKSA bile ürün adı üzerinden analiz yapılabilir
+   * 🔑 İçerik YOKSA bile ürün adı üzerinden analiz
    */
   let analysis = null;
 
@@ -136,6 +136,9 @@ app.get("/scan/:barcode", async (req, res) => {
           reason:
             "Bu ürün bilinen gluten içeren ürünler listesinde yer almaktadır.",
           sources: ["local_fallback"]
+        },
+        meta: {
+          evaluatedAt
         }
       });
     }
@@ -152,6 +155,9 @@ app.get("/scan/:barcode", async (req, res) => {
         reason:
           "Ürün veritabanında bulunamadı ve sertifikasyon bilgisi mevcut değil.",
         sources: []
+      },
+      meta: {
+        evaluatedAt
       }
     });
   }
@@ -171,6 +177,7 @@ app.get("/scan/:barcode", async (req, res) => {
     analysis,
     decision,
     meta: {
+      evaluatedAt,
       openFoodFactsAvailable: offAvailable,
       hasIngredients: !!product.ingredients_text
     }
