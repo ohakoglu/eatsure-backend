@@ -1,7 +1,7 @@
 /**
- * Decision Engine v3.0 – FINAL
+ * Decision Engine v3.1 – FINAL (FIXED)
  * 7-level gluten safety decision model
- * Certification > Declaration > Ingredients > Availability
+ * Certification > Conflict > Ingredients > Declaration > Availability
  */
 
 function decideGlutenStatus({
@@ -15,10 +15,12 @@ function decideGlutenStatus({
   );
 
   const hasIngredients = ingredientAnalysis !== null;
-  const ingredientsContainGluten = ingredientAnalysis?.status === "unsafe";
+
+  const ingredientsContainGluten =
+    ingredientAnalysis?.status === "unsafe";
+
   const ingredientsAreSafe =
-    ingredientAnalysis?.status === "safe" ||
-    ingredientAnalysis?.status === "unknown";
+    ingredientAnalysis?.status === "safe";
 
   /**
    * 🟩 SEVİYE 1
@@ -38,7 +40,6 @@ function decideGlutenStatus({
 
   /**
    * ❌ Sertifika askıda / iptal
-   * (ayrı tutulur, direkt risk)
    */
   if (activeCerts.length === 0 && suspendedCerts.length > 0) {
     return {
@@ -47,6 +48,20 @@ function decideGlutenStatus({
       reason:
         "Ürüne ait glutensiz sertifikaların geçerliliği askıya alınmış veya iptal edilmiştir.",
       sources: suspendedCerts.map(c => c.certifier)
+    };
+  }
+
+  /**
+   * 🟧 SEVİYE 6
+   * Beyan VAR + içerik glutenli (çelişki)
+   */
+  if (manufacturerClaim && ingredientsContainGluten) {
+    return {
+      status: "unsafe",
+      level: "declaration_conflict",
+      reason:
+        "Üretici glutensiz beyanında bulunmuştur ancak içerik bilgisi gluten içermektedir.",
+      sources: ["manufacturer", "ingredients"]
     };
   }
 
@@ -64,22 +79,8 @@ function decideGlutenStatus({
   }
 
   /**
-   * 🟧 SEVİYE 6
-   * Beyan VAR ama içerik glutenli (çelişki)
-   */
-  if (manufacturerClaim && ingredientsContainGluten) {
-    return {
-      status: "unsafe",
-      level: "declaration_conflict",
-      reason:
-        "Üretici glutensiz beyanında bulunmuştur ancak içerik bilgisi gluten içermektedir.",
-      sources: ["manufacturer", "ingredients"]
-    };
-  }
-
-  /**
    * 🟩 SEVİYE 2
-   * Beyan VAR + içerik VAR + içerik uygun
+   * Beyan VAR + içerik VAR + içerik GÜVENLİ
    */
   if (manufacturerClaim && hasIngredients && ingredientsAreSafe) {
     return {
@@ -107,7 +108,7 @@ function decideGlutenStatus({
 
   /**
    * 🟨 SEVİYE 4
-   * Beyan YOK + içerik VAR + içerik uygun
+   * Beyan YOK + içerik VAR + içerik GÜVENLİ
    */
   if (!manufacturerClaim && hasIngredients && ingredientsAreSafe) {
     return {
@@ -121,7 +122,7 @@ function decideGlutenStatus({
 
   /**
    * ⚪️ SEVİYE 5
-   * OFF var/yok ama içerik yok, beyan yok, sertifika yok
+   * İçerik yok + beyan yok + sertifika yok
    */
   return {
     status: "unknown",
