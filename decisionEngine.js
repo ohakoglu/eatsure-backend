@@ -1,5 +1,5 @@
 /**
- * Decision Engine v3.1 – FINAL (FIXED)
+ * Decision Engine v3.2 – FINAL (SAFE FIX)
  * 7-level gluten safety decision model
  * Certification > Conflict > Ingredients > Declaration > Availability
  */
@@ -19,6 +19,7 @@ function decideGlutenStatus({
   const ingredientsContainGluten =
     ingredientAnalysis?.status === "unsafe";
 
+  // 🔑 SADECE gerçekten güvenliyse
   const ingredientsAreSafe =
     ingredientAnalysis?.status === "safe";
 
@@ -122,7 +123,7 @@ function decideGlutenStatus({
 
   /**
    * ⚪️ SEVİYE 5
-   * İçerik yok + beyan yok + sertifika yok
+   * Diğer tüm durumlar (içerik unknown dahil)
    */
   return {
     status: "unknown",
