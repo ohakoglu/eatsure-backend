@@ -1,6 +1,7 @@
 /**
- * Decision Engine v2.3 – FINAL
- * Certification-first, evidence-aware, UX-honest
+ * Decision Engine v3.0 – FINAL
+ * 7-level gluten safety decision model
+ * Certification > Declaration > Ingredients > Availability
  */
 
 function decideGlutenStatus({
@@ -8,48 +9,37 @@ function decideGlutenStatus({
   ingredientAnalysis,
   manufacturerClaim
 }) {
-  // --- CERTIFICATION ANALYSIS ---
-
   const activeCerts = certifications.filter(c => c.status === "active");
   const suspendedCerts = certifications.filter(
     c => c.status === "suspended" || c.status === "revoked"
   );
 
-  // 1️⃣ ACTIVE CERTIFICATION → SAFE
+  const hasIngredients = ingredientAnalysis !== null;
+  const ingredientsContainGluten = ingredientAnalysis?.status === "unsafe";
+  const ingredientsAreSafe =
+    ingredientAnalysis?.status === "safe" ||
+    ingredientAnalysis?.status === "unknown";
+
+  /**
+   * 🟩 SEVİYE 1
+   * Sertifikalı
+   */
   if (activeCerts.length > 0) {
-    const sources = activeCerts.map(c => c.certifier);
-    const scopes = activeCerts.map(c => c.scope);
-
-    const notes = [];
-
-    if (scopes.includes("brand")) {
-      notes.push(
-        "Bu değerlendirme, markaya ait sertifikasyon bilgilerine dayanmaktadır."
-      );
-    }
-
-    if (scopes.includes("brand+family")) {
-      notes.push(
-        "Sertifikasyon belirli ürün ailesi kapsamında geçerlidir."
-      );
-    }
-
-    if (suspendedCerts.length > 0) {
-      notes.push(
-        "Bazı sertifikaların durumu askıya alınmış veya iptal edilmiş olabilir. Detaylar sertifikasyon kaynağında görülebilir."
-      );
-    }
-
     return {
       status: "safe",
       level: "certified",
       reason: "Ürün en az bir geçerli glutensiz sertifikasına sahiptir.",
-      sources,
-      notes
+      sources: activeCerts.map(c => c.certifier),
+      notes: [
+        "Bu değerlendirme, markaya ait sertifikasyon bilgilerine dayanmaktadır."
+      ]
     };
   }
 
-  // 2️⃣ CERTIFICATION SUSPENDED / REVOKED
+  /**
+   * ❌ Sertifika askıda / iptal
+   * (ayrı tutulur, direkt risk)
+   */
   if (activeCerts.length === 0 && suspendedCerts.length > 0) {
     return {
       status: "unsafe",
@@ -60,35 +50,84 @@ function decideGlutenStatus({
     };
   }
 
-  // --- INGREDIENT ANALYSIS ---
-
-  if (ingredientAnalysis?.status === "unsafe") {
+  /**
+   * 🔴 SEVİYE 7
+   * Beyan YOK + içerikte gluten VAR
+   */
+  if (!manufacturerClaim && ingredientsContainGluten) {
     return {
       status: "unsafe",
-      level: "ingredient_risk",
-      reason: ingredientAnalysis.reason,
+      level: "gluten_present",
+      reason: "Ürün içeriğinde gluten veya gluten kaynağı bulunmaktadır.",
       sources: ["ingredients"]
     };
   }
 
-  // --- MANUFACTURER DECLARATION (NO CERT FOUND) ---
+  /**
+   * 🟧 SEVİYE 6
+   * Beyan VAR ama içerik glutenli (çelişki)
+   */
+  if (manufacturerClaim && ingredientsContainGluten) {
+    return {
+      status: "unsafe",
+      level: "declaration_conflict",
+      reason:
+        "Üretici glutensiz beyanında bulunmuştur ancak içerik bilgisi gluten içermektedir.",
+      sources: ["manufacturer", "ingredients"]
+    };
+  }
 
-  if (manufacturerClaim === true) {
+  /**
+   * 🟩 SEVİYE 2
+   * Beyan VAR + içerik VAR + içerik uygun
+   */
+  if (manufacturerClaim && hasIngredients && ingredientsAreSafe) {
+    return {
+      status: "safe",
+      level: "declared_gluten_free_with_ingredients",
+      reason:
+        "Üretici ürünü glutensiz olarak beyan etmektedir ve içerik bilgisi gluten içermemektedir.",
+      sources: ["manufacturer", "ingredients"]
+    };
+  }
+
+  /**
+   * 🟨 SEVİYE 3
+   * Beyan VAR + içerik YOK
+   */
+  if (manufacturerClaim && !hasIngredients) {
     return {
       status: "declared_gluten_free",
-      level: "manufacturer_claim",
+      level: "manufacturer_claim_no_ingredients",
       reason:
-        "Üretici ürünü glutensiz olarak beyan etmektedir. Ancak şu anda taranan sertifikasyon kaynaklarında bu ürüne ait doğrulanmış bir sertifika bilgisi yer almamaktadır.",
+        "Üretici ürünü glutensiz olarak beyan etmektedir ancak içerik bilgisi mevcut değildir.",
       sources: ["manufacturer"]
     };
   }
 
-  // --- INSUFFICIENT DATA ---
+  /**
+   * 🟨 SEVİYE 4
+   * Beyan YOK + içerik VAR + içerik uygun
+   */
+  if (!manufacturerClaim && hasIngredients && ingredientsAreSafe) {
+    return {
+      status: "unknown",
+      level: "ingredients_safe_no_claim",
+      reason:
+        "İçerik bilgisi gluten içermemektedir ancak üretici tarafından glutensiz beyanı yapılmamıştır.",
+      sources: ["ingredients"]
+    };
+  }
 
+  /**
+   * ⚪️ SEVİYE 5
+   * OFF var/yok ama içerik yok, beyan yok, sertifika yok
+   */
   return {
     status: "unknown",
     level: "insufficient_data",
-    reason: "Ürün hakkında yeterli ve doğrulanabilir bilgi bulunmamaktadır.",
+    reason:
+      "Ürün hakkında yeterli içerik, sertifika veya üretici beyanı bilgisi bulunmamaktadır.",
     sources: []
   };
 }
