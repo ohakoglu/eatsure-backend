@@ -1,6 +1,7 @@
 // ===================================
-// Gluten Analysis Engine – FINAL v1.4
-// Multi-language, safety-first, OFF-aware
+// Gluten Analysis Engine – FINAL v1.5
+// Signal-only, multi-language, OFF-aware
+// NO DECISION LOGIC INSIDE
 // ===================================
 
 // 1️⃣ AÇIK OLUMSUZ BEYANLAR (HER ZAMAN ÖNCE)
@@ -12,18 +13,24 @@ const NEGATIVE_PATTERNS = [
   /\bnot suitable for coeliacs\b/,
   /\bnot for celiac\b/,
   /\bnot for coeliac\b/,
-  /\bnon adatto ai celiaci\b/,
-  /\bpas adapte aux celi[aâ]ques\b/,
-  /\bnicht fur zoliakie\b/
+  /\bnon adatto ai celiaci\b/,        // IT
+  /\bpas adapte aux celi[aâ]ques\b/,  // FR
+  /\bnicht fur zoliakie\b/             // DE
 ];
 
 // 2️⃣ KESİN GLUTEN KAYNAKLARI (MULTI-LANGUAGE)
 const DEFINITE_GLUTEN = [
+  // TR
   "bugday", "arpa", "cavdar", "irmik", "bulgur",
+  // EN
   "wheat", "barley", "rye", "semolina",
+  // DE
   "weizen", "gerste", "roggen", "dinkel",
+  // FR
   "ble", "orge", "seigle", "semoule",
+  // IT
   "frumento", "orzo", "segale", "semola",
+  // DERIVATIVES
   "wheat flour", "farine de ble", "weizenmehl",
   "farina di frumento"
 ];
@@ -34,19 +41,27 @@ const GLUTEN_RISK_PATTERNS = [
   /may contain traces of gluten/,
   /traces of gluten/,
   /produced in a facility.*gluten/,
-  /puo contenere.*glutine/,
-  /peut contenir.*gluten/,
-  /kann.*gluten enthalten/
+  /puo contenere.*glutine/,        // IT
+  /peut contenir.*gluten/,         // FR
+  /kann.*gluten enthalten/         // DE
 ];
 
 // 4️⃣ POZİTİF (ÜRETİCİ) BEYANLAR
 const SAFE_TERMS = [
+  // TR
   "glutensiz", "gluten icermez", "glutensizdir",
+  // EN
   "gluten free", "free from gluten", "without gluten",
   "safe for celiac", "safe for coeliac",
   "suitable for celiac", "suitable for coeliac",
-  "senza glutine", "sin gluten", "sem gluten",
-  "sans gluten", "glutenfrei"
+  // IT
+  "senza glutine",
+  // ES / PT
+  "sin gluten", "sem gluten",
+  // FR
+  "sans gluten",
+  // DE
+  "glutenfrei"
 ];
 
 // -------------------------------
@@ -64,7 +79,7 @@ function normalizeText(text = "") {
 }
 
 // -------------------------------
-// ANA ANALİZ
+// ANA ANALİZ (SIGNAL ONLY)
 // -------------------------------
 function analyzeGluten(input = {}) {
   if (typeof input === "string") {
@@ -85,70 +100,34 @@ function analyzeGluten(input = {}) {
 
   if (!pool) {
     return {
-      status: "unknown",
-      reason: "İçerik ve alerjen bilgisi bulunamadı",
-      claimsGlutenFree: false,
       containsGluten: false,
-      hasCrossContaminationRisk: false
+      hasCrossContaminationRisk: false,
+      manufacturerClaim: false,
+      negativeClaim: false
     };
   }
 
-  // 1️⃣ AÇIK OLUMSUZLUK
-  if (NEGATIVE_PATTERNS.some(p => p.test(pool))) {
-    return {
-      status: "unsafe",
-      reason: "Üretici çölyak için güvenli olmadığını belirtmiş",
-      claimsGlutenFree: false,
-      containsGluten: true,
-      hasCrossContaminationRisk: false
-    };
-  }
+  // 1️⃣ NEGATIVE CLAIM (KİLİT – ÖNCE)
+  const negativeClaim =
+    NEGATIVE_PATTERNS.some(p => p.test(pool));
 
-  const containsDefiniteGluten =
+  // 2️⃣ KESİN GLUTEN
+  const containsGluten =
     DEFINITE_GLUTEN.some(term => pool.includes(term));
 
-  const hasManufacturerClaim =
+  // 3️⃣ ÇAPRAZ BULAŞ
+  const hasCrossContaminationRisk =
+    GLUTEN_RISK_PATTERNS.some(p => p.test(pool));
+
+  // 4️⃣ ÜRETİCİ BEYANI
+  const manufacturerClaim =
     SAFE_TERMS.some(term => pool.includes(term));
 
-  // ❗ GLUTEN VAR (BEYAN OLSA BİLE)
-  if (containsDefiniteGluten) {
-    return {
-      status: "unsafe",
-      reason: "Kesin gluten içeren bileşen bulundu",
-      claimsGlutenFree: hasManufacturerClaim,
-      containsGluten: true,
-      hasCrossContaminationRisk: false
-    };
-  }
-
-  // 3️⃣ ÇAPRAZ BULAŞ
-  if (GLUTEN_RISK_PATTERNS.some(p => p.test(pool))) {
-    return {
-      status: "risky",
-      reason: "Etikette glutenle ilgili çapraz bulaş uyarısı var",
-      claimsGlutenFree: false,
-      containsGluten: false,
-      hasCrossContaminationRisk: true
-    };
-  }
-
-  // 4️⃣ SADECE ÜRETİCİ BEYANI
-  if (hasManufacturerClaim) {
-    return {
-      status: "safe",
-      reason: "Üretici ürünü glutensiz olarak beyan etmektedir",
-      claimsGlutenFree: true,
-      containsGluten: false,
-      hasCrossContaminationRisk: false
-    };
-  }
-
   return {
-    status: "unknown",
-    reason: "Gluten durumu net değil",
-    claimsGlutenFree: false,
-    containsGluten: false,
-    hasCrossContaminationRisk: false
+    containsGluten,
+    hasCrossContaminationRisk,
+    manufacturerClaim,
+    negativeClaim
   };
 }
 
