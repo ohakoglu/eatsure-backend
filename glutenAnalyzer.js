@@ -1,9 +1,9 @@
 // ===================================
-// Gluten Analysis Engine – FINAL v1.2
-// Gluten-focused, allergy-aware, UX-safe
+// Gluten Analysis Engine – FINAL v1.3
+// Multi-language, safety-first, UX-safe
 // ===================================
 
-// 1️⃣ AÇIK OLUMSUZ BEYANLAR
+// 1️⃣ AÇIK OLUMSUZ BEYANLAR (HER ZAMAN ÖNCE)
 const NEGATIVE_PATTERNS = [
   /\bnot safe for celiac\b/,
   /\bnot safe for coeliac\b/,
@@ -11,81 +11,80 @@ const NEGATIVE_PATTERNS = [
   /\bnot suitable for coeliac\b/,
   /\bnot suitable for coeliacs\b/,
   /\bnot for celiac\b/,
-  /\bnot for coeliac\b/
+  /\bnot for coeliac\b/,
+  /\bnon adatto ai celiaci\b/,        // IT
+  /\bpas adapte aux celi[aâ]ques\b/,  // FR
+  /\bnicht fur zoliakie\b/             // DE
 ];
 
-// 2️⃣ KESİN GLUTEN KAYNAKLARI
+// 2️⃣ KESİN GLUTEN KAYNAKLARI (MULTI-LANGUAGE)
 const DEFINITE_GLUTEN = [
-  "buğday",
-  "arpa",
-  "çavdar",
-  "irmik",
-  "bulgur",
-  "wheat",
-  "barley",
-  "rye",
-  "semolina",
-  "frumento"
+  // TR
+  "bugday", "arpa", "cavdar", "irmik", "bulgur",
+  // EN
+  "wheat", "barley", "rye", "semolina",
+  // DE
+  "weizen", "gerste", "roggen", "dinkel",
+  // FR
+  "ble", "orge", "seigle", "semoule",
+  // IT
+  "frumento", "orzo", "segale", "semola",
+  // COMMON / DERIVATIVES
+  "wheat flour", "ble farine", "farine de ble",
+  "weizenmehl", "farina di frumento"
 ];
 
-// 3️⃣ GLUTEN ÇAPRAZ BULAŞ RİSKİ
+// 3️⃣ GLUTEN ÇAPRAZ BULAŞ
 const GLUTEN_RISK_PATTERNS = [
   /may contain.*gluten/,
   /may contain traces of gluten/,
   /traces of gluten/,
-  /produced in a facility.*gluten/
+  /produced in a facility.*gluten/,
+  /puo contenere.*glutine/,        // IT
+  /peut contenir.*gluten/,         // FR
+  /kann.*gluten enthalten/         // DE
 ];
 
-// 4️⃣ POZİTİF (ÜRETİCİ) BEYANLAR – CANONICAL
+// 4️⃣ POZİTİF (ÜRETİCİ) BEYANLAR
 const SAFE_TERMS = [
-  "glutensiz",
-  "gluten icermez",
-  "glutensizdir",
-  "gluten free",
-  "free from gluten",
-  "without gluten",
-  "gluten intolerance",
+  // TR
+  "glutensiz", "gluten icermez", "glutensizdir",
+  // EN
+  "gluten free", "free from gluten", "without gluten",
   "for people with gluten intolerance",
   "designed for people with gluten intolerance",
-  "safe for celiac",
-  "safe for coeliac",
-  "suitable for celiac",
-  "suitable for coeliac",
-  "suitable for coeliacs",
+  "safe for celiac", "safe for coeliac",
+  "suitable for celiac", "suitable for coeliac",
+  // IT
   "senza glutine",
-  "sin gluten",
-  "sem gluten"
+  // ES / PT
+  "sin gluten", "sem gluten",
+  // FR
+  "sans gluten",
+  // DE
+  "glutenfrei"
 ];
 
-// 5️⃣ DİĞER ALERJENLER
+// 5️⃣ DİĞER ALERJENLER (BİLGİ AMAÇLI)
 const OTHER_ALLERGENS = [
-  "soy",
-  "soya",
-  "milk",
-  "süt",
-  "dairy",
-  "nuts",
-  "fındık",
-  "egg",
-  "yumurta",
-  "sesame",
-  "susam"
+  "soy", "soya",
+  "milk", "sut", "lait", "milch",
+  "egg", "oeuf", "ei", "uovo",
+  "nuts", "findik", "noisette",
+  "sesame", "susam"
 ];
 
 // -------------------------------
-// NORMALIZATION (KRİTİK KISIM)
+// NORMALIZATION
 // -------------------------------
 function normalizeText(text = "") {
   return text
     .toLowerCase()
-    // aksanları temizle
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    // sık görülen spelling varyasyonları
     .replace(/glutene/g, "gluten")
     .replace(/glúten/g, "gluten")
     .replace(/gluten[e]?\s*intolerance/g, "gluten intolerance")
-    // whitespace temizliği
     .replace(/[\n\r]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -95,7 +94,6 @@ function normalizeText(text = "") {
 // ANA ANALİZ
 // -------------------------------
 function analyzeGluten(input = {}) {
-  // Geriye uyumluluk
   if (typeof input === "string") {
     input = { ingredients: input };
   }
@@ -122,7 +120,7 @@ function analyzeGluten(input = {}) {
     ingredientsText.includes(a)
   );
 
-  // 1️⃣ AÇIK OLUMSUZLUK
+  // 1️⃣ AÇIK OLUMSUZLUK (KİLİT)
   if (NEGATIVE_PATTERNS.some(p => p.test(combinedText))) {
     return {
       status: "unsafe",
@@ -135,18 +133,26 @@ function analyzeGluten(input = {}) {
   }
 
   // 2️⃣ KESİN GLUTEN
-  if (DEFINITE_GLUTEN.some(term => ingredientsText.includes(term))) {
+  const containsDefiniteGluten =
+    DEFINITE_GLUTEN.some(term => ingredientsText.includes(term));
+
+  // 3️⃣ ÜRETİCİ BEYANI
+  const hasManufacturerClaim =
+    SAFE_TERMS.some(term => combinedText.includes(term));
+
+  // ❗ GLUTEN VAR + GF BEYANI VAR → SEVİYE 6 İÇİN KRİTİK
+  if (containsDefiniteGluten) {
     return {
       status: "unsafe",
       reason: "Kesin gluten içeren bileşen bulundu",
       warnings: allergenWarnings,
-      claimsGlutenFree: false,
+      claimsGlutenFree: hasManufacturerClaim,
       containsGluten: true,
       hasCrossContaminationRisk: false
     };
   }
 
-  // 3️⃣ GLUTEN ÇAPRAZ BULAŞ
+  // 4️⃣ ÇAPRAZ BULAŞ
   if (GLUTEN_RISK_PATTERNS.some(p => p.test(ingredientsText))) {
     return {
       status: "risky",
@@ -158,8 +164,8 @@ function analyzeGluten(input = {}) {
     };
   }
 
-  // 4️⃣ POZİTİF ÜRETİCİ BEYANI (ÜRÜN ADI + İÇERİK)
-  if (SAFE_TERMS.some(term => combinedText.includes(term))) {
+  // 5️⃣ POZİTİF BEYAN (GLUTEN YOK)
+  if (hasManufacturerClaim) {
     return {
       status: "safe",
       reason: "Üretici ürünü glutensiz olarak beyan etmektedir",
@@ -170,7 +176,7 @@ function analyzeGluten(input = {}) {
     };
   }
 
-  // 5️⃣ HİÇBİR ŞEY YOK
+  // 6️⃣ BELİRSİZ
   return {
     status: "unknown",
     reason: "Gluten durumu net değil",
