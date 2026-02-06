@@ -1,10 +1,9 @@
 // ===================================
-// Gluten Analysis Engine – FINAL v1.5
-// Signal-only, multi-language, OFF-aware
-// NO DECISION LOGIC INSIDE
+// Gluten Analysis Engine – FINAL v2.0
+// Status-free, multi-language, safety-first
 // ===================================
 
-// 1️⃣ AÇIK OLUMSUZ BEYANLAR (HER ZAMAN ÖNCE)
+// ❌ AÇIK OLUMSUZ BEYANLAR (HER ZAMAN ÖNCELİKLİ)
 const NEGATIVE_PATTERNS = [
   /\bnot safe for celiac\b/,
   /\bnot safe for coeliac\b/,
@@ -18,7 +17,7 @@ const NEGATIVE_PATTERNS = [
   /\bnicht fur zoliakie\b/             // DE
 ];
 
-// 2️⃣ KESİN GLUTEN KAYNAKLARI (MULTI-LANGUAGE)
+// 🌾 KESİN GLUTEN KAYNAKLARI (MULTI-LANGUAGE)
 const DEFINITE_GLUTEN = [
   // TR
   "bugday", "arpa", "cavdar", "irmik", "bulgur",
@@ -30,23 +29,22 @@ const DEFINITE_GLUTEN = [
   "ble", "orge", "seigle", "semoule",
   // IT
   "frumento", "orzo", "segale", "semola",
-  // DERIVATIVES
-  "wheat flour", "farine de ble", "weizenmehl",
-  "farina di frumento"
+  // Türevler
+  "wheat flour", "farine de ble", "weizenmehl", "farina di frumento"
 ];
 
-// 3️⃣ GLUTEN ÇAPRAZ BULAŞ
+// ⚠️ ÇAPRAZ BULAŞ UYARILARI
 const GLUTEN_RISK_PATTERNS = [
   /may contain.*gluten/,
   /may contain traces of gluten/,
   /traces of gluten/,
   /produced in a facility.*gluten/,
-  /puo contenere.*glutine/,        // IT
-  /peut contenir.*gluten/,         // FR
-  /kann.*gluten enthalten/         // DE
+  /puo contenere.*glutine/,
+  /peut contenir.*gluten/,
+  /kann.*gluten enthalten/
 ];
 
-// 4️⃣ POZİTİF (ÜRETİCİ) BEYANLAR
+// ✅ POZİTİF (ÜRETİCİ) BEYANLARI
 const SAFE_TERMS = [
   // TR
   "glutensiz", "gluten icermez", "glutensizdir",
@@ -54,14 +52,9 @@ const SAFE_TERMS = [
   "gluten free", "free from gluten", "without gluten",
   "safe for celiac", "safe for coeliac",
   "suitable for celiac", "suitable for coeliac",
-  // IT
-  "senza glutine",
-  // ES / PT
-  "sin gluten", "sem gluten",
-  // FR
-  "sans gluten",
-  // DE
-  "glutenfrei"
+  // IT / FR / DE / ES
+  "senza glutine", "sans gluten", "glutenfrei",
+  "sin gluten", "sem gluten"
 ];
 
 // -------------------------------
@@ -79,7 +72,7 @@ function normalizeText(text = "") {
 }
 
 // -------------------------------
-// ANA ANALİZ (SIGNAL ONLY)
+// ANA ANALİZ (SADECE BOOLEAN GERÇEKLER)
 // -------------------------------
 function analyzeGluten(input = {}) {
   if (typeof input === "string") {
@@ -107,19 +100,15 @@ function analyzeGluten(input = {}) {
     };
   }
 
-  // 1️⃣ NEGATIVE CLAIM (KİLİT – ÖNCE)
   const negativeClaim =
     NEGATIVE_PATTERNS.some(p => p.test(pool));
 
-  // 2️⃣ KESİN GLUTEN
   const containsGluten =
     DEFINITE_GLUTEN.some(term => pool.includes(term));
 
-  // 3️⃣ ÇAPRAZ BULAŞ
   const hasCrossContaminationRisk =
     GLUTEN_RISK_PATTERNS.some(p => p.test(pool));
 
-  // 4️⃣ ÜRETİCİ BEYANI
   const manufacturerClaim =
     SAFE_TERMS.some(term => pool.includes(term));
 
