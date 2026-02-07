@@ -1,6 +1,7 @@
 /**
- * Decision Engine v4.0 – FINAL
+ * Decision Engine v4.1 – FINAL
  * Status-less, 7-level deterministic model
+ * Cross-contamination is informational, not level-changing
  */
 
 function decideGlutenStatus({
@@ -21,13 +22,18 @@ function decideGlutenStatus({
     negativeClaim = false
   } = ingredientAnalysis || {};
 
+  const crossNote = hasCrossContaminationRisk
+    ? " İçerikte gluten kaynağı bulunmamaktadır ancak çapraz bulaş riski olabilir."
+    : "";
+
   /**
    * 🟩 SEVİYE 1 — Sertifikalı
    */
   if (activeCerts.length > 0) {
     return {
       level: "certified",
-      reason: "Ürün en az bir geçerli glutensiz sertifikasına sahiptir.",
+      reason:
+        "Ürün en az bir geçerli glutensiz sertifikasına sahiptir." + crossNote,
       sources: activeCerts.map(c => c.certifier)
     };
   }
@@ -74,7 +80,8 @@ function decideGlutenStatus({
     return {
       level: "declared_gf_with_ingredients",
       reason:
-        "Üretici ürünü glutensiz olarak beyan etmektedir ve içerik gluten içermemektedir.",
+        "Üretici ürünü glutensiz olarak beyan etmektedir ve içerik gluten içermemektedir." +
+        crossNote,
       sources: ["manufacturer", "ingredients"]
     };
   }
@@ -98,7 +105,8 @@ function decideGlutenStatus({
     return {
       level: "ingredients_safe_no_claim",
       reason:
-        "İçerik gluten içermemektedir ancak glutensiz beyan veya sertifika yoktur.",
+        "İçerik gluten içermemektedir ancak glutensiz beyan veya sertifika yoktur." +
+        crossNote,
       sources: ["ingredients"]
     };
   }
