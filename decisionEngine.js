@@ -1,7 +1,8 @@
 /**
- * Decision Engine v4.1 – FINAL
+ * Decision Engine v4.2 – FINAL
  * Status-less, 7-level deterministic model
- * Cross-contamination is informational, not level-changing
+ * Cross-contamination is informational only
+ * Negative claims always override
  */
 
 function decideGlutenStatus({
@@ -25,6 +26,19 @@ function decideGlutenStatus({
   const crossNote = hasCrossContaminationRisk
     ? " İçerikte gluten kaynağı bulunmamaktadır ancak çapraz bulaş riski olabilir."
     : "";
+
+  /**
+   * ⛔ MUTLAK RED
+   * Açıkça “çölyak için uygun değil” denmişse
+   */
+  if (negativeClaim) {
+    return {
+      level: "gluten_present",
+      reason:
+        "Üretici ürünün çölyak için güvenli olmadığını açıkça belirtmiştir.",
+      sources: ["manufacturer"]
+    };
+  }
 
   /**
    * 🟩 SEVİYE 1 — Sertifikalı
