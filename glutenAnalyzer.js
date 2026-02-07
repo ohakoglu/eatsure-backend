@@ -25,17 +25,19 @@ const GLUTEN_NEGATION_PATTERNS = [
   /\bohne\s+(weizen|gluten)\b/
 ];
 
-// 🌾 NET GLUTEN KAYNAKLARI (YULAF YOK)
+// 🌾 NET GLUTEN KAYNAKLARI (YULAF HARİÇ)
 const DEFINITE_GLUTEN_PATTERNS = [
   /\bbugday\b/, /\barpa\b/, /\bcavdar\b/, /\birmik\b/, /\bbulgur\b/,
   /\bwheat\b/, /\bbarley\b/, /\brye\b/, /\bsemolina\b/,
   /\bweizen\b/, /\bgerste\b/, /\broggen\b/, /\bdinkel\b/,
   /\bble\b/, /\borge\b/, /\bseigle\b/, /\bsemoule\b/,
   /\bfrumento\b/, /\borzo\b/, /\bsegale\b/, /\bsemola\b/,
-  /\bwheat flour\b/, /\bfarine de ble\b/, /\bweizenmehl\b/, /\bfarina di frumento\b/
+  /\bwheat flour\b/, /\bfarine de ble\b/, /\bweizenmehl\b/, /\bfarina di frumento\b/,
+  // ALLERGEN KAYNAKLI GLUTEN
+  /\bgluten\b/
 ];
 
-// ⚠️ RİSK GÖSTERGELERİ (SADECE BİLGİ AMAÇLI)
+// ⚠️ RİSK GÖSTERGELERİ (SADECE BİLGİ)
 const GLUTEN_RISK_PATTERNS = [
   /may contain.*gluten/,
   /may contain traces of gluten/,
@@ -59,9 +61,6 @@ const SAFE_TERMS = [
   "sin gluten", "sem gluten"
 ];
 
-// -------------------------------
-// NORMALIZATION
-// -------------------------------
 function normalizeText(text = "") {
   return text
     .toLowerCase()
@@ -73,14 +72,7 @@ function normalizeText(text = "") {
     .trim();
 }
 
-// -------------------------------
-// ANA ANALİZ (SADECE GERÇEKLER)
-// -------------------------------
 function analyzeGluten(input = {}) {
-  if (typeof input === "string") {
-    input = { ingredients: input };
-  }
-
   const {
     ingredients = "",
     productName = "",
@@ -102,22 +94,15 @@ function analyzeGluten(input = {}) {
     };
   }
 
-  const negativeClaim =
-    NEGATIVE_PATTERNS.some(p => p.test(pool));
+  const negativeClaim = NEGATIVE_PATTERNS.some(p => p.test(pool));
+  const manufacturerClaim = SAFE_TERMS.some(t => pool.includes(t));
+  const hasGlutenNegation = GLUTEN_NEGATION_PATTERNS.some(p => p.test(pool));
 
-  const manufacturerClaim =
-    SAFE_TERMS.some(term => pool.includes(term));
-
-  const hasGlutenNegation =
-    GLUTEN_NEGATION_PATTERNS.some(p => p.test(pool));
-
-  // ❗ KRİTİK DÜZELTME
-  // Beyan varsa + gluten yok deniyorsa → yulaf vs. gluten sayılmaz
+  // 🔥 KRİTİK: allergen / ingredient / tag fark etmez → gluten kaçmaz
   const containsGluten =
     !hasGlutenNegation &&
     DEFINITE_GLUTEN_PATTERNS.some(p => p.test(pool));
 
-  // Çapraz bulaş sadece bilgi amaçlı
   const hasCrossContaminationRisk =
     !manufacturerClaim &&
     GLUTEN_RISK_PATTERNS.some(p => p.test(pool));
