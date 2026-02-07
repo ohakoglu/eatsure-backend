@@ -1,9 +1,9 @@
 // ===================================
-// Gluten Analysis Engine – FINAL v2.2 (FIXED)
+// Gluten Analysis Engine – FINAL v2.3
 // Status-free, multi-language, safety-first
 // ===================================
 
-// ❌ AÇIK OLUMSUZ BEYANLAR (HER ZAMAN ÖNCELİKLİ)
+// ❌ AÇIK OLUMSUZ BEYANLAR
 const NEGATIVE_PATTERNS = [
   /\bnot safe for celiac\b/,
   /\bnot safe for coeliac\b/,
@@ -17,7 +17,7 @@ const NEGATIVE_PATTERNS = [
   /\bnicht fur zoliakie\b/
 ];
 
-// ❎ GLUTEN YOK BEYANLARI (KRİTİK DÜZELTME)
+// ❎ “GLUTEN YOK” BEYANLARI
 const GLUTEN_NEGATION_PATTERNS = [
   /\bsenza\s+(frumento|glutine)\b/,
   /\bwithout\s+(wheat|gluten)\b/,
@@ -25,7 +25,7 @@ const GLUTEN_NEGATION_PATTERNS = [
   /\bohne\s+(weizen|gluten)\b/
 ];
 
-// 🌾 KESİN GLUTEN KAYNAKLARI (YULAF HARİÇ, KELİME SINIRLI)
+// 🌾 NET GLUTEN KAYNAKLARI (YULAF YOK)
 const DEFINITE_GLUTEN_PATTERNS = [
   /\bbugday\b/, /\barpa\b/, /\bcavdar\b/, /\birmik\b/, /\bbulgur\b/,
   /\bwheat\b/, /\bbarley\b/, /\brye\b/, /\bsemolina\b/,
@@ -35,7 +35,7 @@ const DEFINITE_GLUTEN_PATTERNS = [
   /\bwheat flour\b/, /\bfarine de ble\b/, /\bweizenmehl\b/, /\bfarina di frumento\b/
 ];
 
-// ⚠️ ÇAPRAZ BULAŞ / RİSK GÖSTERGELERİ
+// ⚠️ RİSK GÖSTERGELERİ (SADECE BİLGİ AMAÇLI)
 const GLUTEN_RISK_PATTERNS = [
   /may contain.*gluten/,
   /may contain traces of gluten/,
@@ -44,14 +44,12 @@ const GLUTEN_RISK_PATTERNS = [
   /puo contenere.*glutine/,
   /peut contenir.*gluten/,
   /kann.*gluten enthalten/,
-
-  // YULAF / AVENA / OATS → SADECE RİSK
   /\boats?\b/,
   /\bavena\b/,
   /\bavena integrale\b/
 ];
 
-// ✅ POZİTİF (ÜRETİCİ) BEYANLARI
+// ✅ POZİTİF BEYANLAR
 const SAFE_TERMS = [
   "glutensiz", "gluten icermez", "glutensizdir",
   "gluten free", "free from gluten", "without gluten",
@@ -107,19 +105,22 @@ function analyzeGluten(input = {}) {
   const negativeClaim =
     NEGATIVE_PATTERNS.some(p => p.test(pool));
 
-  // ❗ GLUTEN YOK BEYANI VARSA → gluten içermez kabul et
+  const manufacturerClaim =
+    SAFE_TERMS.some(term => pool.includes(term));
+
   const hasGlutenNegation =
     GLUTEN_NEGATION_PATTERNS.some(p => p.test(pool));
 
+  // ❗ KRİTİK DÜZELTME
+  // Beyan varsa + gluten yok deniyorsa → yulaf vs. gluten sayılmaz
   const containsGluten =
     !hasGlutenNegation &&
     DEFINITE_GLUTEN_PATTERNS.some(p => p.test(pool));
 
+  // Çapraz bulaş sadece bilgi amaçlı
   const hasCrossContaminationRisk =
+    !manufacturerClaim &&
     GLUTEN_RISK_PATTERNS.some(p => p.test(pool));
-
-  const manufacturerClaim =
-    SAFE_TERMS.some(term => pool.includes(term));
 
   return {
     containsGluten,
