@@ -1,5 +1,5 @@
 // ===================================
-// Gluten Analysis Engine – FINAL v2.1
+// Gluten Analysis Engine – FINAL v2.2 (FIXED)
 // Status-free, multi-language, safety-first
 // ===================================
 
@@ -17,20 +17,22 @@ const NEGATIVE_PATTERNS = [
   /\bnicht fur zoliakie\b/
 ];
 
-// 🌾 KESİN GLUTEN KAYNAKLARI (YULAF HARİÇ)
-const DEFINITE_GLUTEN = [
-  // TR
-  "bugday", "arpa", "cavdar", "irmik", "bulgur",
-  // EN
-  "wheat", "barley", "rye", "semolina",
-  // DE
-  "weizen", "gerste", "roggen", "dinkel",
-  // FR
-  "ble", "orge", "seigle", "semoule",
-  // IT
-  "frumento", "orzo", "segale", "semola",
-  // Türevler
-  "wheat flour", "farine de ble", "weizenmehl", "farina di frumento"
+// ❎ GLUTEN YOK BEYANLARI (KRİTİK DÜZELTME)
+const GLUTEN_NEGATION_PATTERNS = [
+  /\bsenza\s+(frumento|glutine)\b/,
+  /\bwithout\s+(wheat|gluten)\b/,
+  /\bsans\s+(ble|gluten)\b/,
+  /\bohne\s+(weizen|gluten)\b/
+];
+
+// 🌾 KESİN GLUTEN KAYNAKLARI (YULAF HARİÇ, KELİME SINIRLI)
+const DEFINITE_GLUTEN_PATTERNS = [
+  /\bbugday\b/, /\barpa\b/, /\bcavdar\b/, /\birmik\b/, /\bbulgur\b/,
+  /\bwheat\b/, /\bbarley\b/, /\brye\b/, /\bsemolina\b/,
+  /\bweizen\b/, /\bgerste\b/, /\broggen\b/, /\bdinkel\b/,
+  /\bble\b/, /\borge\b/, /\bseigle\b/, /\bsemoule\b/,
+  /\bfrumento\b/, /\borzo\b/, /\bsegale\b/, /\bsemola\b/,
+  /\bwheat flour\b/, /\bfarine de ble\b/, /\bweizenmehl\b/, /\bfarina di frumento\b/
 ];
 
 // ⚠️ ÇAPRAZ BULAŞ / RİSK GÖSTERGELERİ
@@ -43,7 +45,7 @@ const GLUTEN_RISK_PATTERNS = [
   /peut contenir.*gluten/,
   /kann.*gluten enthalten/,
 
-  // YULAF / AVENA / OATS → RİSK, GLUTEN DEĞİL
+  // YULAF / AVENA / OATS → SADECE RİSK
   /\boats?\b/,
   /\bavena\b/,
   /\bavena integrale\b/
@@ -105,8 +107,13 @@ function analyzeGluten(input = {}) {
   const negativeClaim =
     NEGATIVE_PATTERNS.some(p => p.test(pool));
 
+  // ❗ GLUTEN YOK BEYANI VARSA → gluten içermez kabul et
+  const hasGlutenNegation =
+    GLUTEN_NEGATION_PATTERNS.some(p => p.test(pool));
+
   const containsGluten =
-    DEFINITE_GLUTEN.some(term => pool.includes(term));
+    !hasGlutenNegation &&
+    DEFINITE_GLUTEN_PATTERNS.some(p => p.test(pool));
 
   const hasCrossContaminationRisk =
     GLUTEN_RISK_PATTERNS.some(p => p.test(pool));
