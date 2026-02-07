@@ -1,5 +1,5 @@
 // ===================================
-// Gluten Analysis Engine – FINAL v2.0
+// Gluten Analysis Engine – FINAL v2.1
 // Status-free, multi-language, safety-first
 // ===================================
 
@@ -12,12 +12,12 @@ const NEGATIVE_PATTERNS = [
   /\bnot suitable for coeliacs\b/,
   /\bnot for celiac\b/,
   /\bnot for coeliac\b/,
-  /\bnon adatto ai celiaci\b/,        // IT
-  /\bpas adapte aux celi[aâ]ques\b/,  // FR
-  /\bnicht fur zoliakie\b/             // DE
+  /\bnon adatto ai celiaci\b/,
+  /\bpas adapte aux celi[aâ]ques\b/,
+  /\bnicht fur zoliakie\b/
 ];
 
-// 🌾 KESİN GLUTEN KAYNAKLARI (MULTI-LANGUAGE)
+// 🌾 KESİN GLUTEN KAYNAKLARI (YULAF HARİÇ)
 const DEFINITE_GLUTEN = [
   // TR
   "bugday", "arpa", "cavdar", "irmik", "bulgur",
@@ -33,7 +33,7 @@ const DEFINITE_GLUTEN = [
   "wheat flour", "farine de ble", "weizenmehl", "farina di frumento"
 ];
 
-// ⚠️ ÇAPRAZ BULAŞ UYARILARI
+// ⚠️ ÇAPRAZ BULAŞ / RİSK GÖSTERGELERİ
 const GLUTEN_RISK_PATTERNS = [
   /may contain.*gluten/,
   /may contain traces of gluten/,
@@ -41,18 +41,20 @@ const GLUTEN_RISK_PATTERNS = [
   /produced in a facility.*gluten/,
   /puo contenere.*glutine/,
   /peut contenir.*gluten/,
-  /kann.*gluten enthalten/
+  /kann.*gluten enthalten/,
+
+  // YULAF / AVENA / OATS → RİSK, GLUTEN DEĞİL
+  /\boats?\b/,
+  /\bavena\b/,
+  /\bavena integrale\b/
 ];
 
 // ✅ POZİTİF (ÜRETİCİ) BEYANLARI
 const SAFE_TERMS = [
-  // TR
   "glutensiz", "gluten icermez", "glutensizdir",
-  // EN
   "gluten free", "free from gluten", "without gluten",
   "safe for celiac", "safe for coeliac",
   "suitable for celiac", "suitable for coeliac",
-  // IT / FR / DE / ES
   "senza glutine", "sans gluten", "glutenfrei",
   "sin gluten", "sem gluten"
 ];
@@ -72,7 +74,7 @@ function normalizeText(text = "") {
 }
 
 // -------------------------------
-// ANA ANALİZ (SADECE BOOLEAN GERÇEKLER)
+// ANA ANALİZ (SADECE GERÇEKLER)
 // -------------------------------
 function analyzeGluten(input = {}) {
   if (typeof input === "string") {
