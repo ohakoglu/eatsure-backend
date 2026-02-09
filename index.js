@@ -43,14 +43,10 @@ app.get("/test-cert/:product", (req, res) => {
     productFamily: testProduct.productFamily
   });
 
+  // ❗ KURALINA UYGUN: ingredientAnalysis = null
   const decision = decideGlutenStatus({
     certifications,
-    ingredientAnalysis: {
-      containsGluten: null,
-      hasCrossContaminationRisk: null,
-      manufacturerClaim: null,
-      negativeClaim: null
-    }
+    ingredientAnalysis: null
   });
 
   res.json({
