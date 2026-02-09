@@ -1,9 +1,9 @@
 const gfcoData = require("./gfco.json");
 
 /**
- * Normalize brand names for reliable comparison
+ * Normalize text for reliable comparison
  */
-function normalizeBrand(value = "") {
+function normalize(value = "") {
   return value
     .toLowerCase()
     .normalize("NFD")
@@ -14,53 +14,91 @@ function normalizeBrand(value = "") {
 
 /**
  * Find matching certifications for a given product
- * OPTION A:
- * - Brand match is sufficient
- * - Product family only affects scope, NOT eligibility
+ *
+ * Öncelik sırası (KRİTİK):
+ * 1️⃣ Ürün bazlı sertifika
+ * 2️⃣ Ürün ailesi bazlı sertifika
+ * 3️⃣ Marka bazlı sertifika
  */
-function findCertificationsForProduct({ brand, productFamily }) {
-  const matches = [];
-
+function findCertificationsForProduct({
+  brand,
+  productName,
+  productFamily
+}) {
   if (!brand || !gfcoData.entries) {
-    return matches;
+    return [];
   }
 
-  const normalizedInputBrand = normalizeBrand(brand);
+  const normalizedBrand = normalize(brand);
+  const normalizedProductName = normalize(productName || "");
+  const normalizedProductFamily = normalize(productFamily || "");
+
+  const productMatches = [];
+  const familyMatches = [];
+  const brandMatches = [];
 
   for (const entry of gfcoData.entries) {
     const entryBrand = entry.brand_normalized
-      ? normalizeBrand(entry.brand_normalized)
+      ? normalize(entry.brand_normalized)
       : null;
 
-    // 1️⃣ Marka eşleşmesi ZORUNLU
-    if (!entryBrand || entryBrand !== normalizedInputBrand) {
+    // ❌ Marka eşleşmiyorsa geç
+    if (!entryBrand || entryBrand !== normalizedBrand) {
       continue;
     }
 
-    // 2️⃣ Scope belirleme (bilgi amaçlı)
-    let scope = "brand";
-
+    /**
+     * 1️⃣ ÜRÜN BAZLI SERTİFİKA
+     */
     if (
-      entry.product_family &&
-      productFamily &&
-      productFamily
-        .toLowerCase()
-        .includes(entry.product_family.toLowerCase())
+      entry.product_name &&
+      normalizedProductName &&
+      normalize(entry.product_name) === normalizedProductName
     ) {
-      scope = "brand+family";
+      productMatches.push(buildResult(entry, "product"));
+      continue;
     }
 
-    // 3️⃣ Sertifika geçerli
-    matches.push({
-      certifier: gfcoData.certifier.id,
-      certifier_name: gfcoData.certifier.name,
-      status: entry.status,
-      scope,
-      snapshot_date: gfcoData.snapshot.snapshot_date
-    });
+    /**
+     * 2️⃣ ÜRÜN AİLESİ BAZLI SERTİFİKA
+     */
+    if (
+      entry.product_family &&
+      normalizedProductFamily &&
+      normalizedProductFamily.includes(normalize(entry.product_family))
+    ) {
+      familyMatches.push(buildResult(entry, "product_family"));
+      continue;
+    }
+
+    /**
+     * 3️⃣ MARKA BAZLI SERTİFİKA
+     */
+    if (!entry.product_name && !entry.product_family) {
+      brandMatches.push(buildResult(entry, "brand"));
+    }
   }
 
-  return matches;
+  // 🎯 SADECE EN YÜKSEK ÖNCELİK DÖNER
+  if (productMatches.length > 0) return productMatches;
+  if (familyMatches.length > 0) return familyMatches;
+  return brandMatches;
+}
+
+/**
+ * Ortak çıktı formatı
+ */
+function buildResult(entry, scope) {
+  return {
+    certifier: gfcoData.certifier.id,
+    certifier_name: gfcoData.certifier.name,
+    status: entry.status,
+    scope, // product | product_family | brand
+    status_note: entry.status_note || null,
+    valid_from: entry.valid_from || null,
+    valid_until: entry.valid_until || null,
+    snapshot_date: gfcoData.snapshot.snapshot_date
+  };
 }
 
 module.exports = {
