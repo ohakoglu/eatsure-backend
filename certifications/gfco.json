@@ -12,10 +12,14 @@
     "snapshot_id": "GFCO_2025_03_01",
     "snapshot_date": "2025-03-01",
     "source_url": "https://gfco.org/certified-products/",
+    "source_type": "official_snapshot",
+    "taken_by": "admin",
+    "taken_method": "manual_review",
     "notes": "Reference snapshot used for MVP development"
   },
   "entries": [
     {
+      "certification_scope": "product_family",
       "brand_name": "Dr. Schär",
       "brand_normalized": "schar",
       "product_name": null,
@@ -23,7 +27,13 @@
       "status": "active",
       "status_note": null,
       "valid_from": null,
-      "valid_until": null
+      "valid_until": null,
+      "source": {
+        "type": "official_snapshot",
+        "contributed_by": "admin",
+        "contribution_type": "manual_entry",
+        "confidence": "high"
+      }
     }
   ]
 }
