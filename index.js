@@ -46,10 +46,10 @@ app.get("/test-cert/:product", (req, res) => {
   const decision = decideGlutenStatus({
     certifications,
     ingredientAnalysis: {
-      containsGluten: false,
-      hasCrossContaminationRisk: false,
-      manufacturerClaim: false,
-      negativeClaim: false
+      containsGluten: null,
+      hasCrossContaminationRisk: null,
+      manufacturerClaim: null,
+      negativeClaim: null
     }
   });
 
