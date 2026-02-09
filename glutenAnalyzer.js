@@ -3,6 +3,8 @@
 // Status-free, multi-language, safety-first
 // ===================================
 
+const GENERIC_CONFIG = require("./config/gluten.genericIngredients.json");
+
 // ❌ AÇIK OLUMSUZ BEYANLAR
 const NEGATIVE_PATTERNS = [
   /\bnot safe for celiac\b/,
@@ -33,7 +35,6 @@ const DEFINITE_GLUTEN_PATTERNS = [
   /\bble\b/, /\borge\b/, /\bseigle\b/, /\bsemoule\b/,
   /\bfrumento\b/, /\borzo\b/, /\bsegale\b/, /\bsemola\b/,
   /\bwheat flour\b/, /\bfarine de ble\b/, /\bweizenmehl\b/, /\bfarina di frumento\b/,
-  // ALLERGEN KAYNAKLI GLUTEN
   /\bgluten\b/
 ];
 
@@ -61,15 +62,6 @@ const SAFE_TERMS = [
   "sin gluten", "sem gluten"
 ];
 
-// 🧂 TEK BİLEŞEN / JENERİK İÇERİKLER
-const GENERIC_SINGLE_INGREDIENTS = [
-  "misir",
-  "patlatmalik misir",
-  "corn",
-  "corn kernels",
-  "popcorn"
-];
-
 function normalizeText(text = "") {
   return text
     .toLowerCase()
@@ -94,7 +86,7 @@ function analyzeGluten(input = {}) {
     `${ingredients} ${productName} ${allergens} ${allergenTags} ${traces}`
   );
 
-  // ❌ GERÇEK BOŞLUK / VERİ YOK
+  // ❌ GERÇEK VERİ YOK
   if (!pool) {
     return {
       containsGluten: false,
@@ -112,13 +104,10 @@ function analyzeGluten(input = {}) {
     !hasGlutenNegation &&
     DEFINITE_GLUTEN_PATTERNS.some(p => p.test(pool));
 
-  // 🟡 Tek bileşenli / jenerik içerik mi?
+  // 🟡 Tek bileşenli / jenerik içerik kontrolü (CONFIG’TEN)
   const isGenericSingleIngredient =
-    GENERIC_SINGLE_INGREDIENTS.some(term => pool === term);
+    GENERIC_CONFIG.single_ingredient_terms.some(term => pool === term);
 
-  // ⚠️ Çapraz bulaş:
-  // - Üretici GF diyorsa → ASLA yazma
-  // - Tek bileşenli ama beyan yoksa → bilgi amaçlı yaz
   const hasCrossContaminationRisk =
     !manufacturerClaim &&
     (
