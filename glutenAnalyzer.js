@@ -1,5 +1,5 @@
 // ===================================
-// Gluten Analysis Engine – FINAL v2.3
+// Gluten Analysis Engine – FINAL v2.4
 // Status-free, multi-language, safety-first
 // ===================================
 
@@ -61,6 +61,15 @@ const SAFE_TERMS = [
   "sin gluten", "sem gluten"
 ];
 
+// 🧂 TEK BİLEŞEN / JENERİK İÇERİKLER
+const GENERIC_SINGLE_INGREDIENTS = [
+  "misir",
+  "patlatmalik misir",
+  "corn",
+  "corn kernels",
+  "popcorn"
+];
+
 function normalizeText(text = "") {
   return text
     .toLowerCase()
@@ -85,6 +94,7 @@ function analyzeGluten(input = {}) {
     `${ingredients} ${productName} ${allergens} ${allergenTags} ${traces}`
   );
 
+  // ❌ GERÇEK BOŞLUK / VERİ YOK
   if (!pool) {
     return {
       containsGluten: false,
@@ -98,14 +108,23 @@ function analyzeGluten(input = {}) {
   const manufacturerClaim = SAFE_TERMS.some(t => pool.includes(t));
   const hasGlutenNegation = GLUTEN_NEGATION_PATTERNS.some(p => p.test(pool));
 
-  // 🔥 KRİTİK: allergen / ingredient / tag fark etmez → gluten kaçmaz
   const containsGluten =
     !hasGlutenNegation &&
     DEFINITE_GLUTEN_PATTERNS.some(p => p.test(pool));
 
+  // 🟡 Tek bileşenli / jenerik içerik mi?
+  const isGenericSingleIngredient =
+    GENERIC_SINGLE_INGREDIENTS.some(term => pool === term);
+
+  // ⚠️ Çapraz bulaş:
+  // - Üretici GF diyorsa → ASLA yazma
+  // - Tek bileşenli ama beyan yoksa → bilgi amaçlı yaz
   const hasCrossContaminationRisk =
     !manufacturerClaim &&
-    GLUTEN_RISK_PATTERNS.some(p => p.test(pool));
+    (
+      GLUTEN_RISK_PATTERNS.some(p => p.test(pool)) ||
+      isGenericSingleIngredient
+    );
 
   return {
     containsGluten,
