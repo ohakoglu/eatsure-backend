@@ -21,15 +21,19 @@ app.get("/health", (req, res) => {
 
 /**
  * 🧪 TEMP TEST ENDPOINT — SİLİNECEK
- * Sertifika öncelik sırası testi için
+ * ÜRÜN BAZLI SERTİFİKA TESTİ
+ *
+ * Kullanım:
+ * /test-cert/Test Gluten Free Cookies
+ * /test-cert/Test Chocolate Bar
  */
-app.get("/test-cert", (req, res) => {
+app.get("/test-cert/:product", (req, res) => {
   const evaluatedAt = new Date().toISOString();
+  const productName = req.params.product;
 
-  // 🔧 SABİT TEST ÜRÜNÜ (OFF YOK)
   const testProduct = {
     brand: "TestBrand",
-    productName: "Test Gluten Free Cookies",
+    productName,
     productFamily: null
   };
 
