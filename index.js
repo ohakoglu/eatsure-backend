@@ -19,6 +19,55 @@ app.get("/health", (req, res) => {
   res.status(200).send("ok");
 });
 
+/**
+ * 🧪 TEMP TEST ENDPOINT — SİLİNECEK
+ * Sertifika öncelik sırası testi için
+ */
+app.get("/test-cert", (req, res) => {
+  const evaluatedAt = new Date().toISOString();
+
+  // 🔧 SABİT TEST ÜRÜNÜ (OFF YOK)
+  const testProduct = {
+    brand: "TestBrand",
+    productName: "Test Gluten Free Cookies",
+    productFamily: null
+  };
+
+  const certifications = findCertificationsForProduct({
+    brand: testProduct.brand,
+    productName: testProduct.productName,
+    productFamily: testProduct.productFamily
+  });
+
+  const decision = decideGlutenStatus({
+    certifications,
+    ingredientAnalysis: {
+      containsGluten: false,
+      hasCrossContaminationRisk: false,
+      manufacturerClaim: false,
+      negativeClaim: false
+    }
+  });
+
+  res.json({
+    barcode: "TEST-ONLY",
+    name: testProduct.productName,
+    brand: testProduct.brand,
+    ingredients: null,
+    analysis: {
+      test_mode: true
+    },
+    decision,
+    meta: {
+      evaluatedAt,
+      test_endpoint: true
+    }
+  });
+});
+
+/**
+ * 🔍 NORMAL SCAN ENDPOINT
+ */
 app.get("/scan/:barcode", async (req, res) => {
   const { barcode } = req.params;
   const evaluatedAt = new Date().toISOString();
@@ -43,6 +92,7 @@ app.get("/scan/:barcode", async (req, res) => {
   // 🔹 Sertifikasyon (HER ZAMAN)
   const certifications = findCertificationsForProduct({
     brand: normalizedBrand,
+    productName: productName,
     productFamily: product.categories || ""
   });
 
