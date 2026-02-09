@@ -34,6 +34,24 @@
         "contribution_type": "manual_entry",
         "confidence": "high"
       }
+    },
+
+    {
+      "certification_scope": "product",
+      "brand_name": "TestBrand",
+      "brand_normalized": "testbrand",
+      "product_name": "Test Gluten Free Cookies",
+      "product_family": null,
+      "status": "active",
+      "status_note": "TEMP TEST RECORD – will be removed",
+      "valid_from": null,
+      "valid_until": null,
+      "source": {
+        "type": "manual_test",
+        "contributed_by": "system",
+        "contribution_type": "temporary_test_entry",
+        "confidence": "test"
+      }
     }
   ]
 }
