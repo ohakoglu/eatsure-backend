@@ -117,9 +117,10 @@ function analyzeGluten(input = {}) {
   const isGenericSingleIngredient =
     GENERIC_CONFIG.single_ingredient_terms.some(term => pool === term);
 
-  // ⚠️ ÇAPRAZ BULAŞ — debug ile hangi pattern tetikleniyor görelim
-  const matchedCrossPattern = CROSS_CONTAMINATION_PATTERNS.find(p => p.test(pool));
-  const hasCrossContaminationRisk = !!matchedCrossPattern || isGenericSingleIngredient;
+  // ⚠️ ÇAPRAZ BULAŞ — sadece etiket ifadelerinden
+  const hasCrossContaminationRisk =
+    CROSS_CONTAMINATION_PATTERNS.some(p => p.test(pool)) ||
+    isGenericSingleIngredient;
 
   // 🌾 YULAF — ayrı flag
   const containsOats = OAT_PATTERNS.some(p => p.test(pool));
@@ -129,11 +130,7 @@ function analyzeGluten(input = {}) {
     hasCrossContaminationRisk,
     containsOats,
     manufacturerClaim,
-    negativeClaim,
-    _debug: {
-      matchedCrossPattern: matchedCrossPattern ? matchedCrossPattern.toString() : null,
-      isGenericSingleIngredient
-    }
+    negativeClaim
   };
 }
 
