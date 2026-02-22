@@ -79,12 +79,14 @@ function analyzeGluten(input = {}) {
     productName = "",
     allergens = "",
     allergenTags = "",
-    traces = ""
+    traces = "",
+    labels = "",
+    labelsTags = ""
   } = input;
 
   const pool = normalizeText(
-    `${ingredients} ${productName} ${allergens} ${allergenTags} ${traces}`
-  );
+  `${ingredients} ${productName} ${allergens} ${allergenTags} ${traces} ${labels} ${labelsTags}`
+);
 
   // ❌ GERÇEK VERİ YOK
   if (!pool) {
