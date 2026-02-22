@@ -21,6 +21,8 @@ const NEGATIVE_PATTERNS = [
 
 // ❎ “GLUTEN YOK” BEYANLARI
 const GLUTEN_NEGATION_PATTERNS = [
+  /\bgluten[\s\-]free\b/,     // YENİ — "gluten free" ve "gluten-free"
+  /\bno[\s\-]gluten\b/,       // YENİ — "no gluten" ve "no-gluten"
   /\bsenza\s+(frumento|glutine)\b/,
   /\bwithout\s+(wheat|gluten)\b/,
   /\bsans\s+(ble|gluten)\b/,
