@@ -104,7 +104,7 @@ app.get("/scan/:barcode", async (req, res) => {
       productName: product.product_name || "",
       allergens: product.allergens || "",
       allergenTags: (product.allergens_tags || []).join(" "),
-      traces: product.traces || "",
+      traces: (product.traces_tags || []).join(" ") || product.traces || "",
       labels: product.labels || "",
       labelsTags: (product.labels_tags || []).join(" ")
     });
