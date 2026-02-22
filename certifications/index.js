@@ -1,4 +1,10 @@
-const gfcoData = require("./gfco.json");
+const fs = require("fs");
+const path = require("path");
+
+const allCertifications = fs
+  .readdirSync(__dirname)
+  .filter(file => file.endsWith(".json"))
+  .map(file => require(path.join(__dirname, file)));
 
 /**
  * Normalize text for reliable comparison
@@ -25,7 +31,7 @@ function findCertificationsForProduct({
   productName,
   productFamily
 }) {
-  if (!brand || !gfcoData.entries) {
+  if (!brand) {
     return [];
   }
 
@@ -37,45 +43,49 @@ function findCertificationsForProduct({
   const familyMatches = [];
   const brandMatches = [];
 
-  for (const entry of gfcoData.entries) {
-    const entryBrand = entry.brand_normalized
-      ? normalize(entry.brand_normalized)
-      : null;
+  for (const certData of allCertifications) {
+    if (!certData.entries) continue;
 
-    // ❌ Marka eşleşmiyorsa geç
-    if (!entryBrand || entryBrand !== normalizedBrand) {
-      continue;
-    }
+    for (const entry of certData.entries) {
+      const entryBrand = entry.brand_normalized
+        ? normalize(entry.brand_normalized)
+        : null;
 
-    /**
-     * 1️⃣ ÜRÜN BAZLI SERTİFİKA
-     */
-    if (
-      entry.product_name &&
-      normalizedProductName &&
-      normalize(entry.product_name) === normalizedProductName
-    ) {
-      productMatches.push(buildResult(entry, "product"));
-      continue;
-    }
+      // ❌ Marka eşleşmiyorsa geç
+      if (!entryBrand || entryBrand !== normalizedBrand) {
+        continue;
+      }
 
-    /**
-     * 2️⃣ ÜRÜN AİLESİ BAZLI SERTİFİKA
-     */
-    if (
-      entry.product_family &&
-      normalizedProductFamily &&
-      normalizedProductFamily.includes(normalize(entry.product_family))
-    ) {
-      familyMatches.push(buildResult(entry, "product_family"));
-      continue;
-    }
+      /**
+       * 1️⃣ ÜRÜN BAZLI SERTİFİKA
+       */
+      if (
+        entry.product_name &&
+        normalizedProductName &&
+        normalize(entry.product_name) === normalizedProductName
+      ) {
+        productMatches.push(buildResult(entry, "product", certData));
+        continue;
+      }
 
-    /**
-     * 3️⃣ MARKA BAZLI SERTİFİKA
-     */
-    if (!entry.product_name && !entry.product_family) {
-      brandMatches.push(buildResult(entry, "brand"));
+      /**
+       * 2️⃣ ÜRÜN AİLESİ BAZLI SERTİFİKA
+       */
+      if (
+        entry.product_family &&
+        normalizedProductFamily &&
+        normalizedProductFamily.includes(normalize(entry.product_family))
+      ) {
+        familyMatches.push(buildResult(entry, "product_family", certData));
+        continue;
+      }
+
+      /**
+       * 3️⃣ MARKA BAZLI SERTİFİKA
+       */
+      if (!entry.product_name && !entry.product_family) {
+        brandMatches.push(buildResult(entry, "brand", certData));
+      }
     }
   }
 
@@ -88,7 +98,7 @@ function findCertificationsForProduct({
 /**
  * Ortak çıktı formatı
  */
-function buildResult(entry, scope) {
+function buildResult(entry, scope, certData) {
   let status = entry.status;
   if (status === "active" && entry.valid_until) {
     const now = new Date();
@@ -97,15 +107,16 @@ function buildResult(entry, scope) {
       status = "expired";
     }
   }
+
   return {
-    certifier: gfcoData.certifier.id,
-    certifier_name: gfcoData.certifier.name,
+    certifier: certData.certifier.id,
+    certifier_name: certData.certifier.name,
     status,
     scope,
     status_note: entry.status_note || null,
     valid_from: entry.valid_from || null,
     valid_until: entry.valid_until || null,
-    snapshot_date: gfcoData.snapshot.snapshot_date
+    snapshot_date: certData.snapshot.snapshot_date
   };
 }
 
