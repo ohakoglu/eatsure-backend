@@ -89,11 +89,19 @@ function findCertificationsForProduct({
  * Ortak çıktı formatı
  */
 function buildResult(entry, scope) {
+  let status = entry.status;
+  if (status === "active" && entry.valid_until) {
+    const now = new Date();
+    const until = new Date(entry.valid_until);
+    if (until < now) {
+      status = "expired";
+    }
+  }
   return {
     certifier: gfcoData.certifier.id,
     certifier_name: gfcoData.certifier.name,
-    status: entry.status,
-    scope, // product | product_family | brand
+    status,
+    scope,
     status_note: entry.status_note || null,
     valid_from: entry.valid_from || null,
     valid_until: entry.valid_until || null,
