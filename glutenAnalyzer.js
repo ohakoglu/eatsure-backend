@@ -61,7 +61,7 @@ const SAFE_TERMS = [
   "safe for celiac", "safe for coeliac",
   "suitable for celiac", "suitable for coeliac",
   "senza glutine", "sans gluten", "glutenfrei",
-  "sin gluten", "sem gluten"
+  "sin gluten", "sem gluten", "no gluten", "gluten-free"
 ];
 
 function normalizeText(text = "") {
