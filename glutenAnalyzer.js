@@ -41,7 +41,7 @@ const DEFINITE_GLUTEN_PATTERNS = [
 
 // ⚠️ ETİKET KAYNAKLI ÇAPRAZ BULAŞ İFADELERİ
 const CROSS_CONTAMINATION_PATTERNS = [
-  /may contain.*gluten/,
+  /may contain[^.]*gluten/,
   /may contain traces of gluten/,
   /traces of gluten/,
   /produced in a facility.*gluten/,
