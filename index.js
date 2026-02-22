@@ -27,44 +27,37 @@ app.get("/health", (req, res) => {
  * /test-cert/Test Gluten Free Cookies
  * /test-cert/Test Chocolate Bar
  */
+
+
+
 if (process.env.NODE_ENV !== "production") {
-app.get("/test-cert/:product", (req, res) => {
-  const evaluatedAt = new Date().toISOString();
-  const productName = req.params.product;
-
-  const testProduct = {
-    brand: "TestBrand",
-    productName,
-    productFamily: null
-  };
-
-  const certifications = findCertificationsForProduct({
-    brand: testProduct.brand,
-    productName: testProduct.productName,
-    productFamily: testProduct.productFamily
+  app.get("/test-cert/:product", (req, res) => {
+    const evaluatedAt = new Date().toISOString();
+    const productName = req.params.product;
+    const testProduct = {
+      brand: "TestBrand",
+      productName,
+      productFamily: null
+    };
+    const certifications = findCertificationsForProduct({
+      brand: testProduct.brand,
+      productName: testProduct.productName,
+      productFamily: testProduct.productFamily
+    });
+    const decision = decideGlutenStatus({
+      certifications,
+      ingredientAnalysis: null
+    });
+    res.json({
+      barcode: "TEST-ONLY",
+      name: testProduct.productName,
+      brand: testProduct.brand,
+      ingredients: null,
+      analysis: { test_mode: true },
+      decision,
+      meta: { evaluatedAt, test_endpoint: true }
+    });
   });
-
-  // ❗ KURALINA UYGUN: ingredientAnalysis = null
-  const decision = decideGlutenStatus({
-    certifications,
-    ingredientAnalysis: null
-  });
-
-  res.json({
-    barcode: "TEST-ONLY",
-    name: testProduct.productName,
-    brand: testProduct.brand,
-    ingredients: null,
-    analysis: {
-      test_mode: true
-    },
-    decision,
-    meta: {
-      evaluatedAt,
-      test_endpoint: true
-    }
-  });
-});
 }
 /**
  * 🔍 NORMAL SCAN ENDPOINT
