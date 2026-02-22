@@ -1,8 +1,7 @@
 // ===================================
-// Gluten Analysis Engine – FINAL v2.4
+// Gluten Analysis Engine – v2.5
 // Status-free, multi-language, safety-first
 // ===================================
-
 const GENERIC_CONFIG = require("./config/gluten.genericIngredients.json");
 
 // ❌ AÇIK OLUMSUZ BEYANLAR
@@ -19,10 +18,10 @@ const NEGATIVE_PATTERNS = [
   /\bnicht fur zoliakie\b/
 ];
 
-// ❎ “GLUTEN YOK” BEYANLARI
+// ❎ "GLUTEN YOK" BEYANLARI
 const GLUTEN_NEGATION_PATTERNS = [
-  /\bgluten[\s\-]free\b/,     // YENİ — "gluten free" ve "gluten-free"
-  /\bno[\s\-]gluten\b/,       // YENİ — "no gluten" ve "no-gluten"
+  /\bgluten[\s\-]free\b/,
+  /\bno[\s\-]gluten\b/,
   /\bsenza\s+(frumento|glutine)\b/,
   /\bwithout\s+(wheat|gluten)\b/,
   /\bsans\s+(ble|gluten)\b/,
@@ -40,15 +39,19 @@ const DEFINITE_GLUTEN_PATTERNS = [
   /\bgluten\b/
 ];
 
-// ⚠️ RİSK GÖSTERGELERİ (SADECE BİLGİ)
-const GLUTEN_RISK_PATTERNS = [
+// ⚠️ ETİKET KAYNAKLI ÇAPRAZ BULAŞ İFADELERİ
+const CROSS_CONTAMINATION_PATTERNS = [
   /may contain.*gluten/,
   /may contain traces of gluten/,
   /traces of gluten/,
   /produced in a facility.*gluten/,
   /puo contenere.*glutine/,
   /peut contenir.*gluten/,
-  /kann.*gluten enthalten/,
+  /kann.*gluten enthalten/
+];
+
+// 🌾 YULAF GÖSTERGELERİ (AYRI FLAG)
+const OAT_PATTERNS = [
   /\boats?\b/,
   /\bavena\b/,
   /\bavena integrale\b/
@@ -87,14 +90,15 @@ function analyzeGluten(input = {}) {
   } = input;
 
   const pool = normalizeText(
-  `${ingredients} ${productName} ${allergens} ${allergenTags} ${traces} ${labels} ${labelsTags}`
-);
+    `${ingredients} ${productName} ${allergens} ${allergenTags} ${traces} ${labels} ${labelsTags}`
+  );
 
   // ❌ GERÇEK VERİ YOK
   if (!pool) {
     return {
       containsGluten: false,
       hasCrossContaminationRisk: false,
+      containsOats: false,
       manufacturerClaim: false,
       negativeClaim: false
     };
@@ -108,20 +112,22 @@ function analyzeGluten(input = {}) {
     !hasGlutenNegation &&
     DEFINITE_GLUTEN_PATTERNS.some(p => p.test(pool));
 
-  // 🟡 Tek bileşenli / jenerik içerik kontrolü (CONFIG’TEN)
+  // 🟡 Tek bileşenli / jenerik içerik kontrolü (CONFIG'TEN)
   const isGenericSingleIngredient =
     GENERIC_CONFIG.single_ingredient_terms.some(term => pool === term);
 
+  // ⚠️ ÇAPRAZ BULAŞ — sadece etiket ifadelerinden
   const hasCrossContaminationRisk =
-    !manufacturerClaim &&
-    (
-      GLUTEN_RISK_PATTERNS.some(p => p.test(pool)) ||
-      isGenericSingleIngredient
-    );
+    CROSS_CONTAMINATION_PATTERNS.some(p => p.test(pool)) ||
+    isGenericSingleIngredient;
+
+  // 🌾 YULAF — ayrı flag
+  const containsOats = OAT_PATTERNS.some(p => p.test(pool));
 
   return {
     containsGluten,
     hasCrossContaminationRisk,
+    containsOats,
     manufacturerClaim,
     negativeClaim
   };
