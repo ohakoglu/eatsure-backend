@@ -87,7 +87,7 @@ app.get("/scan/:barcode", async (req, res) => {
   const certifications = findCertificationsForProduct({
     brand: normalizedBrand,
     productName: productName,
-    productFamily: product.categories || ""
+    productFamily: (product.categories_tags || []).join(" ") || product.categories || ""
   });
 
   // 🔑 KRİTİK: TÜM OFF ALANLARI ANALYZER’A GİDER
