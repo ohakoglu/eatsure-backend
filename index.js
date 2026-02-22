@@ -43,7 +43,6 @@ app.get("/test-cert/:product", (req, res) => {
     productName: testProduct.productName,
     productFamily: testProduct.productFamily
   });
-  }
 
   // ❗ KURALINA UYGUN: ingredientAnalysis = null
   const decision = decideGlutenStatus({
@@ -66,7 +65,7 @@ app.get("/test-cert/:product", (req, res) => {
     }
   });
 });
-
+}
 /**
  * 🔍 NORMAL SCAN ENDPOINT
  */
