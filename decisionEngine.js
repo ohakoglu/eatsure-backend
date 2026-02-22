@@ -90,16 +90,20 @@ function decideGlutenStatus({
     };
   }
 
-  // 🟨 SEVİYE 4
-  if (!manufacturerClaim && !containsGluten && ingredientAnalysis) {
-    const warnings = hasCrossContaminationRisk ? ["cross_contamination"] : [];
-    return {
-      level: "ingredients_safe_no_claim",
-      reason: "İçerik gluten kaynağı içermemektedir ancak glutensiz beyan veya sertifika yoktur.",
-      sources: ["ingredients"],
-      warnings
-    };
-  }
+
+  
+// 🟨 SEVİYE 4
+if (!manufacturerClaim && !containsGluten && ingredientAnalysis) {
+  const warnings = [];
+  if (hasCrossContaminationRisk) warnings.push("cross_contamination");
+  if (containsOats) warnings.push("contains_oats");
+  return {
+    level: "ingredients_safe_no_claim",
+    reason: "İçerik gluten kaynağı içermemektedir ancak glutensiz beyan veya sertifika yoktur.",
+    sources: ["ingredients"],
+    warnings
+  };
+}
 
   // ⚪️ SEVİYE 5
   return {
