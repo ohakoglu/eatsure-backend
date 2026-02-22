@@ -27,6 +27,7 @@ app.get("/health", (req, res) => {
  * /test-cert/Test Gluten Free Cookies
  * /test-cert/Test Chocolate Bar
  */
+if (process.env.NODE_ENV !== "production") {
 app.get("/test-cert/:product", (req, res) => {
   const evaluatedAt = new Date().toISOString();
   const productName = req.params.product;
@@ -42,6 +43,7 @@ app.get("/test-cert/:product", (req, res) => {
     productName: testProduct.productName,
     productFamily: testProduct.productFamily
   });
+  }
 
   // ❗ KURALINA UYGUN: ingredientAnalysis = null
   const decision = decideGlutenStatus({
