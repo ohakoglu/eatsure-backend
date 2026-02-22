@@ -44,17 +44,18 @@ const CROSS_CONTAMINATION_PATTERNS = [
   /may contain[^.]*gluten/,
   /may contain traces of gluten/,
   /traces of gluten/,
-  /produced in a facility.*gluten/,
-  /puo contenere.*glutine/,
-  /peut contenir.*gluten/,
-  /kann.*gluten enthalten/
+  /produced in a facility[^.]*gluten/,
+  /puo contenere[^.]*glutine/,
+  /peut contenir[^.]*gluten/,
+  /kann[^.]*gluten enthalten/
 ];
 
 // 🌾 YULAF GÖSTERGELERİ (AYRI FLAG)
 const OAT_PATTERNS = [
   /\boats?\b/,
   /\bavena\b/,
-  /\bavena integrale\b/
+  /\bavena integrale\b/,
+  /\baveia\b/
 ];
 
 // ✅ POZİTİF BEYANLAR
@@ -116,10 +117,9 @@ function analyzeGluten(input = {}) {
   const isGenericSingleIngredient =
     GENERIC_CONFIG.single_ingredient_terms.some(term => pool === term);
 
-  // ⚠️ ÇAPRAZ BULAŞ — sadece etiket ifadelerinden
-  const hasCrossContaminationRisk =
-    CROSS_CONTAMINATION_PATTERNS.some(p => p.test(pool)) ||
-    isGenericSingleIngredient;
+  // ⚠️ ÇAPRAZ BULAŞ — debug ile hangi pattern tetikleniyor görelim
+  const matchedCrossPattern = CROSS_CONTAMINATION_PATTERNS.find(p => p.test(pool));
+  const hasCrossContaminationRisk = !!matchedCrossPattern || isGenericSingleIngredient;
 
   // 🌾 YULAF — ayrı flag
   const containsOats = OAT_PATTERNS.some(p => p.test(pool));
@@ -129,7 +129,11 @@ function analyzeGluten(input = {}) {
     hasCrossContaminationRisk,
     containsOats,
     manufacturerClaim,
-    negativeClaim
+    negativeClaim,
+    _debug: {
+      matchedCrossPattern: matchedCrossPattern ? matchedCrossPattern.toString() : null,
+      isGenericSingleIngredient
+    }
   };
 }
 
