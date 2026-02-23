@@ -20,6 +20,18 @@ app.get("/health", (req, res) => {
 });
 
 /**
+ * ✅ Array/String/Null güvenli join helper
+ * - Array -> "a b c"
+ * - String -> aynen
+ * - Null/undefined -> ""
+ */
+function safeJoin(value) {
+  if (Array.isArray(value)) return value.join(" ");
+  if (typeof value === "string") return value;
+  return "";
+}
+
+/**
  * 🧪 TEMP TEST ENDPOINT — SİLİNECEK
  * ÜRÜN BAZLI SERTİFİKA TESTİ
  *
@@ -27,27 +39,28 @@ app.get("/health", (req, res) => {
  * /test-cert/Test Gluten Free Cookies
  * /test-cert/Test Chocolate Bar
  */
-
-
-
 if (process.env.NODE_ENV !== "production") {
   app.get("/test-cert/:product", (req, res) => {
     const evaluatedAt = new Date().toISOString();
     const productName = req.params.product;
+
     const testProduct = {
       brand: "TestBrand",
       productName,
       productFamily: null
     };
+
     const certifications = findCertificationsForProduct({
       brand: testProduct.brand,
       productName: testProduct.productName,
       productFamily: testProduct.productFamily
     });
+
     const decision = decideGlutenStatus({
       certifications,
       ingredientAnalysis: null
     });
+
     res.json({
       barcode: "TEST-ONLY",
       name: testProduct.productName,
@@ -59,6 +72,7 @@ if (process.env.NODE_ENV !== "production") {
     });
   });
 }
+
 /**
  * 🔍 NORMAL SCAN ENDPOINT
  */
@@ -83,30 +97,49 @@ app.get("/scan/:barcode", async (req, res) => {
     ? product.brands.split(",")[0].trim()
     : null;
 
+  // tags/text alanlarını önce normalize edip sonra kullanalım (join crash riskini kaldırır)
+  const categoriesTagsText = safeJoin(product.categories_tags);
+  const allergensTagsText = safeJoin(product.allergens_tags);
+  const tracesTagsText = safeJoin(product.traces_tags);
+  const labelsTagsText = safeJoin(product.labels_tags);
+
   // 🔹 Sertifikasyon (HER ZAMAN)
   const certifications = findCertificationsForProduct({
     brand: normalizedBrand,
     productName: productName,
-    productFamily: (product.categories_tags || []).join(" ") || product.categories || ""
+    productFamily: categoriesTagsText || product.categories || ""
   });
 
   // 🔑 KRİTİK: TÜM OFF ALANLARI ANALYZER’A GİDER
   let analysis = null;
-  if (
-    product.ingredients_text ||
-    product.product_name ||
-    product.allergens ||
-    product.allergens_tags ||
-    product.traces
-  ) {
+
+  const ingredientsText = product.ingredients_text || "";
+  const productNameText = product.product_name || "";
+  const allergensText = product.allergens || "";
+  const tracesText = product.traces || "";
+  const labelsText = product.labels || "";
+
+  // labels/labels_tags dahil: içerik boş olsa bile GF beyanı yakalanabilsin
+  const hasAnyAnalyzableText = [
+    ingredientsText,
+    productNameText,
+    allergensText,
+    allergensTagsText,
+    tracesText,
+    tracesTagsText,
+    labelsText,
+    labelsTagsText
+  ].some(v => typeof v === "string" && v.trim().length > 0);
+
+  if (hasAnyAnalyzableText) {
     analysis = analyzeGluten({
-      ingredients: product.ingredients_text || "",
-      productName: product.product_name || "",
-      allergens: product.allergens || "",
-      allergenTags: (product.allergens_tags || []).join(" "),
-      traces: (product.traces_tags || []).join(" ") || product.traces || "",
-      labels: product.labels || "",
-      labelsTags: (product.labels_tags || []).join(" ")
+      ingredients: ingredientsText,
+      productName: productNameText,
+      allergens: allergensText,
+      allergenTags: allergensTagsText,
+      traces: tracesTagsText || tracesText,
+      labels: labelsText,
+      labelsTags: labelsTagsText
     });
   }
 
