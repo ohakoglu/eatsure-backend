@@ -1,5 +1,6 @@
+// glutenAnalyzer.js
 // ===================================
-// Gluten Analysis Engine – v2.5
+// Gluten Analysis Engine – v2.6
 // Status-free, multi-language, safety-first
 // ===================================
 const GENERIC_CONFIG = require("./config/gluten.genericIngredients.json");
@@ -90,9 +91,13 @@ function analyzeGluten(input = {}) {
     labelsTags = ""
   } = input;
 
+  // 1) Ana havuz (genel analiz)
   const pool = normalizeText(
     `${ingredients} ${productName} ${allergens} ${allergenTags} ${traces} ${labels} ${labelsTags}`
   );
+
+  // 2) Sadece ALLERGEN alanı (kritik ayrı sinyal)
+  const allergenPool = normalizeText(`${allergens} ${allergenTags}`);
 
   // ❌ GERÇEK VERİ YOK
   if (!pool) {
@@ -101,7 +106,8 @@ function analyzeGluten(input = {}) {
       hasCrossContaminationRisk: false,
       containsOats: false,
       manufacturerClaim: false,
-      negativeClaim: false
+      negativeClaim: false,
+      allergenGluten: false
     };
   }
 
@@ -117,7 +123,7 @@ function analyzeGluten(input = {}) {
   const isGenericSingleIngredient =
     GENERIC_CONFIG.single_ingredient_terms.some(term => pool === term);
 
-  // ⚠️ ÇAPRAZ BULAŞ — sadece etiket ifadelerinden
+  // ⚠️ ÇAPRAZ BULAŞ — sadece etiket ifadelerinden (+ jenerik tek bileşen)
   const hasCrossContaminationRisk =
     CROSS_CONTAMINATION_PATTERNS.some(p => p.test(pool)) ||
     isGenericSingleIngredient;
@@ -125,12 +131,23 @@ function analyzeGluten(input = {}) {
   // 🌾 YULAF — ayrı flag
   const containsOats = OAT_PATTERNS.some(p => p.test(pool));
 
+  // 🔴 ALLERGEN GLUTEN — sadece allergen alanına bak
+  // Not: "gluten free / no gluten" gibi ifadeler allergen alanında geçse bile allergen olarak sayma
+  const allergenHasNegation =
+    /\bgluten[\s\-]free\b/.test(allergenPool) || /\bno[\s\-]gluten\b/.test(allergenPool);
+
+  const allergenGluten =
+    !!allergenPool &&
+    !allergenHasNegation &&
+    /\bgluten\b/.test(allergenPool);
+
   return {
     containsGluten,
     hasCrossContaminationRisk,
     containsOats,
     manufacturerClaim,
-    negativeClaim
+    negativeClaim,
+    allergenGluten
   };
 }
 
