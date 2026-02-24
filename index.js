@@ -54,10 +54,164 @@ function requireAdmin(req, res) {
  * 🧩 OFF User-Agent
  */
 function getOffUserAgent() {
-  return (
-    process.env.OFF_USER_AGENT ||
-    "EatSure/0.1 (contact: admin@example.com)"
-  );
+  return process.env.OFF_USER_AGENT || "EatSure/0.1 (contact: admin@example.com)";
+}
+
+/**
+ * ⏳ Small sleep helper (for retry backoff)
+ */
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * ✅ timeout / network kaynaklı mı?
+ */
+function isRetryableOffError(err) {
+  if (!err) return false;
+  if (err.code === "ECONNABORTED") return true; // axios timeout
+  const msg = String(err.message || "").toLowerCase();
+  if (msg.includes("timeout")) return true;
+  if (msg.includes("socket hang up")) return true;
+  if (msg.includes("econnreset")) return true;
+  if (msg.includes("enetunreach") || msg.includes("eai_again")) return true;
+  return false;
+}
+
+/**
+ * ✅ OFF search response -> seed-friendly map
+ */
+function mapOffProducts(products) {
+  const list = Array.isArray(products) ? products : [];
+  return list.map(p => ({
+    barcode: p.code || null,
+    name: p.product_name || null,
+    brand: p.brands ? String(p.brands).split(",")[0].trim() : null,
+
+    // ham alanlar
+    brands_raw: p.brands || null,
+    ingredients_text: p.ingredients_text || null,
+    allergens: p.allergens || null,
+    allergens_tags: p.allergens_tags || null,
+    traces: p.traces || null,
+    traces_tags: p.traces_tags || null,
+    labels: p.labels || null,
+    labels_tags: p.labels_tags || null,
+    categories: p.categories || null,
+    categories_tags: p.categories_tags || null,
+    countries: p.countries || null,
+    countries_tags: p.countries_tags || null
+  }));
+}
+
+/**
+ * 📦 OFF v0 search (cgi/search.pl)
+ */
+async function fetchOffSearchV0({ countryTag, page, limit, fields }) {
+  const url = "https://world.openfoodfacts.org/cgi/search.pl";
+
+  const response = await axios.get(url, {
+    timeout: 40000, // ✅ 40s
+    headers: { "User-Agent": getOffUserAgent() },
+    params: {
+      search_simple: 1,
+      action: "process",
+      json: 1,
+      page,
+      page_size: limit,
+
+      // Ülke filtresi
+      tagtype_0: "countries",
+      tag_contains_0: "contains",
+      tag_0: countryTag,
+
+      // Alanları küçült
+      fields
+    },
+    validateStatus: () => true
+  });
+
+  if (!response.data) {
+    const e = new Error("OFF_EMPTY_RESPONSE");
+    e._off_empty = true;
+    throw e;
+  }
+
+  return response.data; // { products, count, ... }
+}
+
+/**
+ * 📦 OFF v2 search (fallback)
+ * Not: v2'nin query parametreleri bazen değişken olabiliyor.
+ * Bu yüzden en basit yaklaşım: countries_tags ile filtrelemeye çalışıyoruz.
+ */
+async function fetchOffSearchV2({ countryTag, page, limit, fields }) {
+  const url = "https://world.openfoodfacts.org/api/v2/search";
+
+  // v2 tarafında çoğu yerde "en:turkey" formatı görüyoruz.
+  // countryTag burada "turkey" gibi geliyor; v2 için "en:turkey" deneyelim.
+  const v2CountryTag = countryTag.startsWith("en:") ? countryTag : `en:${countryTag}`;
+
+  const response = await axios.get(url, {
+    timeout: 40000, // ✅ 40s
+    headers: { "User-Agent": getOffUserAgent() },
+    params: {
+      page,
+      page_size: limit,
+      fields,
+
+      // v2 filter denemesi:
+      // çoğu OFF v2 aramasında {field}_tags ile filtre çalışıyor.
+      countries_tags: v2CountryTag
+    },
+    validateStatus: () => true
+  });
+
+  if (!response.data) {
+    const e = new Error("OFF_EMPTY_RESPONSE");
+    e._off_empty = true;
+    throw e;
+  }
+
+  // v2 genelde { products: [...], count: n, page, page_size } döndürür
+  return response.data;
+}
+
+/**
+ * 📦 OFF search with 1 retry + v2 fallback
+ */
+async function fetchOffWithRetryAndFallback({ countryTag, page, limit, fields }) {
+  // 1) önce v0 (retry ile)
+  try {
+    try {
+      return { source: "openfoodfacts_search_v0", data: await fetchOffSearchV0({ countryTag, page, limit, fields }) };
+    } catch (err1) {
+      // retry bir kere
+      if (isRetryableOffError(err1)) {
+        await sleep(300);
+        return { source: "openfoodfacts_search_v0", data: await fetchOffSearchV0({ countryTag, page, limit, fields }) };
+      }
+      // retryable değilse yine de fallback'e şans verelim
+      throw err1;
+    }
+  } catch (errV0) {
+    // 2) v2 fallback (retry ile)
+    try {
+      try {
+        return { source: "openfoodfacts_search_v2", data: await fetchOffSearchV2({ countryTag, page, limit, fields }) };
+      } catch (err2) {
+        if (isRetryableOffError(err2)) {
+          await sleep(300);
+          return { source: "openfoodfacts_search_v2", data: await fetchOffSearchV2({ countryTag, page, limit, fields }) };
+        }
+        throw err2;
+      }
+    } catch (errV2) {
+      // ikisi de patladı -> anlamlı hata döndür
+      const finalErr = errV2 || errV0;
+      throw finalErr;
+    }
+  }
 }
 
 /**
@@ -87,12 +241,6 @@ app.get("/admin/seed/off", async (req, res) => {
   let countryTag = rawCountry;
   if (countryTag === "tr") countryTag = "turkey";
   if (countryTag.startsWith("en:")) countryTag = countryTag.replace("en:", "");
-  // Son durumda OFF search için "turkey" gibi kalsın
-  // (OFF search endpoint tag_0 değerinde genelde "turkey" kullanılıyor)
-
-  // OFF search (legacy) — v2'ye geçmiyoruz (şimdilik)
-  // https://world.openfoodfacts.org/cgi/search.pl
-  const url = "https://world.openfoodfacts.org/cgi/search.pl";
 
   // fields ile payload küçültelim
   const fields = [
@@ -113,71 +261,25 @@ app.get("/admin/seed/off", async (req, res) => {
   ].join(",");
 
   try {
-    const response = await axios.get(url, {
-      timeout: 12000,
-      headers: {
-        "User-Agent": getOffUserAgent()
-      },
-      params: {
-        search_simple: 1,
-        action: "process",
-        json: 1,
-        page,
-        page_size: limit,
-
-        // Ülke filtresi
-        tagtype_0: "countries",
-        tag_contains_0: "contains",
-        tag_0: countryTag,
-
-        // Alanları küçült
-        fields
-      },
-      validateStatus: () => true
+    const { source, data } = await fetchOffWithRetryAndFallback({
+      countryTag,
+      page,
+      limit,
+      fields
     });
 
-    if (!response.data) {
-      return res.status(502).json({
-        error: "OFF_EMPTY_RESPONSE",
-        evaluatedAt
-      });
-    }
-
-    // OFF search response: { products: [...], count, page, page_size, ... }
-    const products = Array.isArray(response.data.products)
-      ? response.data.products
-      : [];
-
-    // Bizim için “seed-friendly” küçük bir format çıkaralım
-    const mapped = products.map(p => ({
-      barcode: p.code || null,
-      name: p.product_name || null,
-      brand: p.brands ? String(p.brands).split(",")[0].trim() : null,
-
-      // ham alanlar
-      brands_raw: p.brands || null,
-      ingredients_text: p.ingredients_text || null,
-      allergens: p.allergens || null,
-      allergens_tags: p.allergens_tags || null,
-      traces: p.traces || null,
-      traces_tags: p.traces_tags || null,
-      labels: p.labels || null,
-      labels_tags: p.labels_tags || null,
-      categories: p.categories || null,
-      categories_tags: p.categories_tags || null,
-      countries: p.countries || null,
-      countries_tags: p.countries_tags || null
-    }));
+    const products = Array.isArray(data.products) ? data.products : [];
+    const mapped = mapOffProducts(products);
 
     return res.json({
       meta: {
         evaluatedAt,
-        source: "openfoodfacts_search_v0",
+        source, // ✅ v0 mı v2 mi
         country: countryTag,
         page,
         page_size: limit,
         returned: mapped.length,
-        total_count: response.data.count || null
+        total_count: data.count || null
       },
       products: mapped
     });
@@ -252,9 +354,7 @@ app.get("/scan/:barcode", async (req, res) => {
   const product = offAvailable ? offData.product || {} : {};
 
   const productName = product.product_name || null;
-  const normalizedBrand = product.brands
-    ? product.brands.split(",")[0].trim()
-    : null;
+  const normalizedBrand = product.brands ? product.brands.split(",")[0].trim() : null;
 
   // tags/text alanlarını önce normalize edip sonra kullanalım (join crash riskini kaldırır)
   const categoriesTagsText = safeJoin(product.categories_tags);
