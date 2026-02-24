@@ -105,29 +105,87 @@ function mapOffProducts(products) {
 }
 
 /**
- * 📦 OFF v0 search (cgi/search.pl)
+ * ✅ “Glutensiz beyanı” hızlı kontrol (seed için)
+ * Not: Bu bir karar motoru değil; sadece seed listesini daraltmak için.
  */
-async function fetchOffSearchV0({ countryTag, page, limit, fields }) {
+function normalizeText(text = "") {
+  return String(text || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\n\r]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function looksLikeGlutenFreeClaim(p = {}) {
+  const labelsTags = Array.isArray(p.labels_tags) ? p.labels_tags : [];
+  if (labelsTags.includes("en:no-gluten")) return true;
+
+  const pool = normalizeText(
+    `${p.product_name || ""} ${p.labels || ""} ${p.ingredients_text || ""}`
+  );
+
+  // Çok kaba ama işe yarar seed filtresi:
+  const terms = [
+    "gluten free",
+    "gluten-free",
+    "no gluten",
+    "without gluten",
+    "free from gluten",
+    "sans gluten",
+    "senza glutine",
+    "glutenfrei",
+    "sin gluten",
+    "sem gluten",
+    "glutensiz",
+    "gluten icermez",
+    "gluten içermez"
+  ];
+
+  return terms.some(t => pool.includes(normalizeText(t)));
+}
+
+function isProbablyNonFood(p = {}) {
+  const cats = Array.isArray(p.categories_tags) ? p.categories_tags : [];
+  // OFF içinde kozmetik vb. çok çıkabiliyor
+  if (cats.includes("en:open-beauty-facts")) return true;
+  return false;
+}
+
+/**
+ * 📦 OFF v0 search (cgi/search.pl)
+ * Bu sürümde aynı anda birden fazla tag filtresi kullanılabiliyor (tagtype_0, tagtype_1 ...).
+ */
+async function fetchOffSearchV0({ countryTag, page, limit, fields, gfOnly }) {
   const url = "https://world.openfoodfacts.org/cgi/search.pl";
 
+  const params = {
+    search_simple: 1,
+    action: "process",
+    json: 1,
+    page,
+    page_size: limit,
+    fields
+  };
+
+  // 1) Ülke filtresi
+  params.tagtype_0 = "countries";
+  params.tag_contains_0 = "contains";
+  params.tag_0 = countryTag;
+
+  // 2) GF label filtresi (mümkünse OFF tarafında)
+  // OFF labels_tags içinde örnek: "en:no-gluten"
+  if (gfOnly) {
+    params.tagtype_1 = "labels";
+    params.tag_contains_1 = "contains";
+    params.tag_1 = "en:no-gluten";
+  }
+
   const response = await axios.get(url, {
-    timeout: 40000, // ✅ 40s
+    timeout: 40000,
     headers: { "User-Agent": getOffUserAgent() },
-    params: {
-      search_simple: 1,
-      action: "process",
-      json: 1,
-      page,
-      page_size: limit,
-
-      // Ülke filtresi
-      tagtype_0: "countries",
-      tag_contains_0: "contains",
-      tag_0: countryTag,
-
-      // Alanları küçült
-      fields
-    },
+    params,
     validateStatus: () => true
   });
 
@@ -142,27 +200,21 @@ async function fetchOffSearchV0({ countryTag, page, limit, fields }) {
 
 /**
  * 📦 OFF v2 search (fallback)
- * Not: v2'nin query parametreleri bazen değişken olabiliyor.
- * Bu yüzden en basit yaklaşım: countries_tags ile filtrelemeye çalışıyoruz.
+ * v2 parametreleri değişken olabildiği için burada “best effort” yapıyoruz.
  */
 async function fetchOffSearchV2({ countryTag, page, limit, fields }) {
   const url = "https://world.openfoodfacts.org/api/v2/search";
-
-  // v2 tarafında çoğu yerde "en:turkey" formatı görüyoruz.
-  // countryTag burada "turkey" gibi geliyor; v2 için "en:turkey" deneyelim.
   const v2CountryTag = countryTag.startsWith("en:") ? countryTag : `en:${countryTag}`;
 
   const response = await axios.get(url, {
-    timeout: 40000, // ✅ 40s
+    timeout: 40000,
     headers: { "User-Agent": getOffUserAgent() },
     params: {
       page,
       page_size: limit,
       fields,
-
-      // v2 filter denemesi:
-      // çoğu OFF v2 aramasında {field}_tags ile filtre çalışıyor.
       countries_tags: v2CountryTag
+      // v2'de labels filtresi her zaman stabil değil, post-filter yapacağız
     },
     validateStatus: () => true
   });
@@ -173,76 +225,80 @@ async function fetchOffSearchV2({ countryTag, page, limit, fields }) {
     throw e;
   }
 
-  // v2 genelde { products: [...], count: n, page, page_size } döndürür
   return response.data;
 }
 
 /**
  * 📦 OFF search with 1 retry + v2 fallback
  */
-async function fetchOffWithRetryAndFallback({ countryTag, page, limit, fields }) {
+async function fetchOffWithRetryAndFallback({ countryTag, page, limit, fields, gfOnly }) {
   // 1) önce v0 (retry ile)
   try {
     try {
-      return { source: "openfoodfacts_search_v0", data: await fetchOffSearchV0({ countryTag, page, limit, fields }) };
+      return {
+        source: "openfoodfacts_search_v0",
+        data: await fetchOffSearchV0({ countryTag, page, limit, fields, gfOnly })
+      };
     } catch (err1) {
-      // retry bir kere
       if (isRetryableOffError(err1)) {
         await sleep(300);
-        return { source: "openfoodfacts_search_v0", data: await fetchOffSearchV0({ countryTag, page, limit, fields }) };
+        return {
+          source: "openfoodfacts_search_v0",
+          data: await fetchOffSearchV0({ countryTag, page, limit, fields, gfOnly })
+        };
       }
-      // retryable değilse yine de fallback'e şans verelim
       throw err1;
     }
   } catch (errV0) {
     // 2) v2 fallback (retry ile)
     try {
       try {
-        return { source: "openfoodfacts_search_v2", data: await fetchOffSearchV2({ countryTag, page, limit, fields }) };
+        return {
+          source: "openfoodfacts_search_v2",
+          data: await fetchOffSearchV2({ countryTag, page, limit, fields })
+        };
       } catch (err2) {
         if (isRetryableOffError(err2)) {
           await sleep(300);
-          return { source: "openfoodfacts_search_v2", data: await fetchOffSearchV2({ countryTag, page, limit, fields }) };
+          return {
+            source: "openfoodfacts_search_v2",
+            data: await fetchOffSearchV2({ countryTag, page, limit, fields })
+          };
         }
         throw err2;
       }
     } catch (errV2) {
-      // ikisi de patladı -> anlamlı hata döndür
-      const finalErr = errV2 || errV0;
-      throw finalErr;
+      throw (errV2 || errV0);
     }
   }
 }
 
 /**
  * 📦 Admin Seed Endpoint (DB'ye yazmaz, JSON döner)
- * Amaç: OFF'tan ülkeye göre ürün listesi çekip,
- * ileride sertifika DB / ürün DB seed için temel veri üretmek.
  *
- * Kullanım:
+ * Kullanım (varsayılan: gfOnly=1):
  * /admin/seed/off?key=ADMIN_KEY&country=tr&limit=200&page=1
  *
- * Notlar:
- * - country: tr | turkey | en:turkey vs (basit normalize ediyoruz)
- * - limit: 1..500 (default 200)
- * - page: 1..n (default 1)
+ * GF filtresini kapatmak için:
+ * /admin/seed/off?key=...&country=tr&limit=200&page=1&gfOnly=0
  */
 app.get("/admin/seed/off", async (req, res) => {
   if (!requireAdmin(req, res)) return;
 
   const evaluatedAt = new Date().toISOString();
 
-  // --- Params ---
   const rawCountry = String(req.query.country || "tr").toLowerCase().trim();
   const page = Math.max(1, parseInt(req.query.page || "1", 10));
   const limit = Math.min(500, Math.max(1, parseInt(req.query.limit || "200", 10)));
+
+  // gfOnly default: 1 (açık)
+  const gfOnly = String(req.query.gfOnly || "1").trim() !== "0";
 
   // OFF'ta ülke tag'i bazen "turkey" / "en:turkey"
   let countryTag = rawCountry;
   if (countryTag === "tr") countryTag = "turkey";
   if (countryTag.startsWith("en:")) countryTag = countryTag.replace("en:", "");
 
-  // fields ile payload küçültelim
   const fields = [
     "code",
     "product_name",
@@ -265,19 +321,28 @@ app.get("/admin/seed/off", async (req, res) => {
       countryTag,
       page,
       limit,
-      fields
+      fields,
+      gfOnly
     });
 
     const products = Array.isArray(data.products) ? data.products : [];
-    const mapped = mapOffProducts(products);
+
+    // v0'da label filtresi çalışsa bile kirli veri olabilir,
+    // v2 fallback'te zaten label filtresi yok -> post-filter şart.
+    const filtered = products
+      .filter(p => !isProbablyNonFood(p))
+      .filter(p => (gfOnly ? looksLikeGlutenFreeClaim(p) : true));
+
+    const mapped = mapOffProducts(filtered);
 
     return res.json({
       meta: {
         evaluatedAt,
-        source, // ✅ v0 mı v2 mi
+        source,
         country: countryTag,
         page,
         page_size: limit,
+        gfOnly,
         returned: mapped.length,
         total_count: data.count || null
       },
@@ -294,11 +359,6 @@ app.get("/admin/seed/off", async (req, res) => {
 
 /**
  * 🧪 TEMP TEST ENDPOINT — SİLİNECEK
- * ÜRÜN BAZLI SERTİFİKA TESTİ
- *
- * Kullanım:
- * /test-cert/Test Gluten Free Cookies
- * /test-cert/Test Chocolate Bar
  */
 if (process.env.NODE_ENV !== "production") {
   app.get("/test-cert/:product", (req, res) => {
@@ -356,20 +416,17 @@ app.get("/scan/:barcode", async (req, res) => {
   const productName = product.product_name || null;
   const normalizedBrand = product.brands ? product.brands.split(",")[0].trim() : null;
 
-  // tags/text alanlarını önce normalize edip sonra kullanalım (join crash riskini kaldırır)
   const categoriesTagsText = safeJoin(product.categories_tags);
   const allergensTagsText = safeJoin(product.allergens_tags);
   const tracesTagsText = safeJoin(product.traces_tags);
   const labelsTagsText = safeJoin(product.labels_tags);
 
-  // 🔹 Sertifikasyon (HER ZAMAN)
   const certifications = findCertificationsForProduct({
     brand: normalizedBrand,
     productName: productName,
     productFamily: categoriesTagsText || product.categories || ""
   });
 
-  // 🔑 KRİTİK: TÜM OFF ALANLARI ANALYZER’A GİDER
   let analysis = null;
 
   const ingredientsText = product.ingredients_text || "";
@@ -378,7 +435,6 @@ app.get("/scan/:barcode", async (req, res) => {
   const tracesText = product.traces || "";
   const labelsText = product.labels || "";
 
-  // labels/labels_tags dahil: içerik boş olsa bile GF beyanı yakalanabilsin
   const hasAnyAnalyzableText = [
     ingredientsText,
     productNameText,
