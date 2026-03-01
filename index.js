@@ -8,7 +8,8 @@ const { fetchProductByBarcode } = require("./openFoodFacts");
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+// OCR metni bazen uzun olabilir: limit'i biraz yükseltiyoruz
+app.use(express.json({ limit: "1mb" }));
 
 const PORT = process.env.PORT || 3000;
 
@@ -34,10 +35,6 @@ function safeJoin(value) {
 /**
  * 🧪 TEMP TEST ENDPOINT — SİLİNECEK
  * ÜRÜN BAZLI SERTİFİKA TESTİ
- *
- * Kullanım:
- * /test-cert/Test Gluten Free Cookies
- * /test-cert/Test Chocolate Bar
  */
 if (process.env.NODE_ENV !== "production") {
   app.get("/test-cert/:product", (req, res) => {
@@ -74,7 +71,95 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 /**
- * 🔍 NORMAL SCAN ENDPOINT
+ * ✅ OCR TEXT ANALYZE ENDPOINT (YENİ)
+ * PWA OCR → labelText gönderir → decision döner.
+ *
+ * POST /analyze-label
+ * body: {
+ *   labelText: "...."   (zorunlu)
+ *   barcode?: "..."     (opsiyonel)
+ *   brand?: "..."       (opsiyonel)
+ *   name?: "..."        (opsiyonel)
+ * }
+ */
+app.post("/analyze-label", async (req, res) => {
+  const evaluatedAt = new Date().toISOString();
+
+  const labelText = typeof req.body?.labelText === "string" ? req.body.labelText : "";
+  const barcode = typeof req.body?.barcode === "string" ? req.body.barcode.trim() : null;
+  const inputBrand = typeof req.body?.brand === "string" ? req.body.brand.trim() : null;
+  const inputName = typeof req.body?.name === "string" ? req.body.name.trim() : null;
+
+  if (!labelText || labelText.trim().length < 3) {
+    return res.status(400).json({
+      error: "INVALID_INPUT",
+      message: "labelText zorunludur (en az 3 karakter).",
+      meta: { evaluatedAt }
+    });
+  }
+
+  // Sertifika için marka gerekiyorsa: PWA’dan brand gönder (en doğru yol).
+  // İstersen barcode gönderip sonra OFF’tan çekerek brand/name tahmini yapabiliriz (opsiyonel).
+  let resolvedBrand = inputBrand;
+  let resolvedName = inputName;
+  let offAvailable = false;
+
+  if ((!resolvedBrand || !resolvedName) && barcode) {
+    // Opsiyonel: barcode varsa OFF’tan ürün adı/marka çekip boşları doldurmaya çalış
+    try {
+      const offData = await fetchProductByBarcode(barcode);
+      if (offData && offData.status === 1 && offData.product) {
+        offAvailable = true;
+        const p = offData.product;
+        if (!resolvedName && p.product_name) resolvedName = p.product_name;
+        if (!resolvedBrand && p.brands) resolvedBrand = String(p.brands).split(",")[0].trim();
+      }
+    } catch {
+      // OFF yoksa sorun değil: OCR metni üzerinden karar veriyoruz
+    }
+  }
+
+  // Sertifikasyon (brand varsa)
+  const certifications = resolvedBrand
+    ? findCertificationsForProduct({
+        brand: resolvedBrand,
+        productName: resolvedName || "",
+        productFamily: "" // OCR aşamasında family eşleşmesini şimdilik boş geçiyoruz
+      })
+    : [];
+
+  // Analyzer: OCR metnini labels alanına veriyoruz (en doğal yer)
+  const analysis = analyzeGluten({
+    ingredients: "",
+    productName: resolvedName || "",
+    allergens: "",
+    allergenTags: "",
+    traces: "",
+    labels: labelText,
+    labelsTags: ""
+  });
+
+  const decision = decideGlutenStatus({
+    certifications,
+    ingredientAnalysis: analysis
+  });
+
+  return res.json({
+    barcode: barcode || null,
+    name: resolvedName || null,
+    brand: resolvedBrand || null,
+    analysis,
+    decision,
+    meta: {
+      evaluatedAt,
+      source: "ocr_text",
+      openFoodFactsUsedForPrefill: offAvailable
+    }
+  });
+});
+
+/**
+ * 🔍 NORMAL SCAN ENDPOINT (MEVCUT)
  */
 app.get("/scan/:barcode", async (req, res) => {
   const { barcode } = req.params;
@@ -97,20 +182,17 @@ app.get("/scan/:barcode", async (req, res) => {
     ? product.brands.split(",")[0].trim()
     : null;
 
-  // tags/text alanlarını önce normalize edip sonra kullanalım (join crash riskini kaldırır)
   const categoriesTagsText = safeJoin(product.categories_tags);
   const allergensTagsText = safeJoin(product.allergens_tags);
   const tracesTagsText = safeJoin(product.traces_tags);
   const labelsTagsText = safeJoin(product.labels_tags);
 
-  // 🔹 Sertifikasyon (HER ZAMAN)
   const certifications = findCertificationsForProduct({
     brand: normalizedBrand,
     productName: productName,
     productFamily: categoriesTagsText || product.categories || ""
   });
 
-  // 🔑 KRİTİK: TÜM OFF ALANLARI ANALYZER’A GİDER
   let analysis = null;
 
   const ingredientsText = product.ingredients_text || "";
@@ -119,7 +201,6 @@ app.get("/scan/:barcode", async (req, res) => {
   const tracesText = product.traces || "";
   const labelsText = product.labels || "";
 
-  // labels/labels_tags dahil: içerik boş olsa bile GF beyanı yakalanabilsin
   const hasAnyAnalyzableText = [
     ingredientsText,
     productNameText,
@@ -131,28 +212,16 @@ app.get("/scan/:barcode", async (req, res) => {
     labelsTagsText
   ].some(v => typeof v === "string" && v.trim().length > 0);
 
-  // ✅ DÜZELTME: product.traces_tags bazı kayıtlarda var, traces yok -> analysis kaçmasın
-  if (
-    product.ingredients_text ||
-    product.product_name ||
-    product.allergens ||
-    product.allergens_tags ||
-    product.traces ||
-    product.traces_tags || // ✅ eklendi
-    product.labels ||
-    product.labels_tags
-  ) {
-    if (hasAnyAnalyzableText) {
-      analysis = analyzeGluten({
-        ingredients: ingredientsText,
-        productName: productNameText,
-        allergens: allergensText,
-        allergenTags: allergensTagsText,
-        traces: tracesTagsText || tracesText,
-        labels: labelsText,
-        labelsTags: labelsTagsText
-      });
-    }
+  if (hasAnyAnalyzableText) {
+    analysis = analyzeGluten({
+      ingredients: ingredientsText,
+      productName: productNameText,
+      allergens: allergensText,
+      allergenTags: allergensTagsText,
+      traces: tracesTagsText || tracesText,
+      labels: labelsText,
+      labelsTags: labelsTagsText
+    });
   }
 
   const decision = decideGlutenStatus({
