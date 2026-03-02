@@ -1,3 +1,10 @@
+// index.js (EATSURE BACKEND)
+// ===================================
+// Main API
+// - /scan/:barcode  -> OFF üzerinden normal tarama
+// - /ocr/analyze    -> OCR metnini analiz edip karar üretir
+// ===================================
+
 const express = require("express");
 const cors = require("cors");
 
@@ -8,8 +15,9 @@ const { fetchProductByBarcode } = require("./openFoodFacts");
 
 const app = express();
 app.use(cors());
-// OCR metni bazen uzun olabilir: limit'i biraz yükseltiyoruz
-app.use(express.json({ limit: "1mb" }));
+
+// OCR metni bazen uzun olabilir: limit'i yükseltiyoruz
+app.use(express.json({ limit: "2mb" }));
 
 const PORT = process.env.PORT || 3000;
 
@@ -30,6 +38,16 @@ function safeJoin(value) {
   if (Array.isArray(value)) return value.join(" ");
   if (typeof value === "string") return value;
   return "";
+}
+
+/**
+ * ✅ Brand normalize helper (OFF brands -> first)
+ */
+function firstBrand(brands) {
+  if (!brands) return null;
+  const s = String(brands);
+  const first = s.split(",")[0]?.trim();
+  return first || null;
 }
 
 /**
@@ -71,18 +89,19 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 /**
- * ✅ OCR TEXT ANALYZE ENDPOINT (YENİ)
- * PWA OCR → labelText gönderir → decision döner.
+ * ✅ OCR TEXT ANALYZE ENDPOINT
  *
- * POST /analyze-label
+ * PWA OCR → labelText gönderir → analysis + decision döner.
+ *
+ * POST /ocr/analyze
  * body: {
  *   labelText: "...."   (zorunlu)
  *   barcode?: "..."     (opsiyonel)
- *   brand?: "..."       (opsiyonel)
+ *   brand?: "..."       (opsiyonel)  // varsa en doğrusu
  *   name?: "..."        (opsiyonel)
  * }
  */
-app.post("/analyze-label", async (req, res) => {
+app.post("/ocr/analyze", async (req, res) => {
   const evaluatedAt = new Date().toISOString();
 
   const labelText = typeof req.body?.labelText === "string" ? req.body.labelText : "";
@@ -98,28 +117,28 @@ app.post("/analyze-label", async (req, res) => {
     });
   }
 
-  // Sertifika için marka gerekiyorsa: PWA’dan brand gönder (en doğru yol).
-  // İstersen barcode gönderip sonra OFF’tan çekerek brand/name tahmini yapabiliriz (opsiyonel).
-  let resolvedBrand = inputBrand;
-  let resolvedName = inputName;
-  let offAvailable = false;
+  // 1) Önce PWA'dan gelen brand/name (en doğru kaynak)
+  let resolvedBrand = inputBrand || null;
+  let resolvedName = inputName || null;
 
-  if ((!resolvedBrand || !resolvedName) && barcode) {
-    // Opsiyonel: barcode varsa OFF’tan ürün adı/marka çekip boşları doldurmaya çalış
+  // 2) Opsiyonel: barcode varsa OFF'tan sadece boşları doldurmayı dene
+  let offAvailable = false;
+  if (barcode && (!resolvedBrand || !resolvedName)) {
     try {
       const offData = await fetchProductByBarcode(barcode);
       if (offData && offData.status === 1 && offData.product) {
         offAvailable = true;
         const p = offData.product;
+
         if (!resolvedName && p.product_name) resolvedName = p.product_name;
-        if (!resolvedBrand && p.brands) resolvedBrand = String(p.brands).split(",")[0].trim();
+        if (!resolvedBrand && p.brands) resolvedBrand = firstBrand(p.brands);
       }
     } catch {
-      // OFF yoksa sorun değil: OCR metni üzerinden karar veriyoruz
+      // OFF yoksa problem değil, OCR ile karar üretiriz.
     }
   }
 
-  // Sertifikasyon (brand varsa)
+  // Sertifikasyon: sadece brand varsa anlamlı
   const certifications = resolvedBrand
     ? findCertificationsForProduct({
         brand: resolvedBrand,
@@ -128,7 +147,7 @@ app.post("/analyze-label", async (req, res) => {
       })
     : [];
 
-  // Analyzer: OCR metnini labels alanına veriyoruz (en doğal yer)
+  // Analyzer: OCR metnini labels alanına veriyoruz (gluten free / may contain / vs burada yakalanır)
   const analysis = analyzeGluten({
     ingredients: "",
     productName: resolvedName || "",
@@ -178,21 +197,21 @@ app.get("/scan/:barcode", async (req, res) => {
   const product = offAvailable ? offData.product || {} : {};
 
   const productName = product.product_name || null;
-  const normalizedBrand = product.brands
-    ? product.brands.split(",")[0].trim()
-    : null;
+  const normalizedBrand = firstBrand(product.brands);
 
   const categoriesTagsText = safeJoin(product.categories_tags);
   const allergensTagsText = safeJoin(product.allergens_tags);
   const tracesTagsText = safeJoin(product.traces_tags);
   const labelsTagsText = safeJoin(product.labels_tags);
 
+  // 🔹 Sertifikasyon
   const certifications = findCertificationsForProduct({
     brand: normalizedBrand,
     productName: productName,
     productFamily: categoriesTagsText || product.categories || ""
   });
 
+  // 🔑 Analyzer'a tüm ilgili OFF alanları
   let analysis = null;
 
   const ingredientsText = product.ingredients_text || "";
