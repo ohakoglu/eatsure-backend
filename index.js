@@ -1,6 +1,6 @@
-// index.js (TAMAMINI DEĞİŞTİR)
 const express = require("express");
 const cors = require("cors");
+const OpenAI = require("openai");
 
 const { findCertificationsForProduct } = require("./certifications");
 const { analyzeGluten } = require("./glutenAnalyzer");
@@ -9,10 +9,16 @@ const { fetchProductByBarcode } = require("./openFoodFacts");
 
 const app = express();
 app.use(cors());
-// OCR metni bazen uzun olabilir: limit'i biraz yükseltiyoruz
-app.use(express.json({ limit: "1mb" }));
+// Görsel base64 payload için limit yükseltildi
+app.use(express.json({ limit: "15mb" }));
 
 const PORT = process.env.PORT || 3000;
+
+const openai = process.env.OPENAI_API_KEY
+  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  : null;
+
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
 /**
  * 🔥 HEALTH CHECK
@@ -31,6 +37,146 @@ function safeJoin(value) {
   if (Array.isArray(value)) return value.join(" ");
   if (typeof value === "string") return value;
   return "";
+}
+
+/**
+ * ✅ Basit JSON parse helper
+ * - markdown code fence varsa temizler
+ */
+function parseJsonFromModelText(text) {
+  if (!text || typeof text !== "string") return null;
+
+  let cleaned = text.trim();
+
+  if (cleaned.startsWith("```")) {
+    cleaned = cleaned.replace(/^```json\s*/i, "");
+    cleaned = cleaned.replace(/^```\s*/i, "");
+    cleaned = cleaned.replace(/\s*```$/i, "");
+  }
+
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * ✅ String listeleri tek metne dönüştür
+ */
+function joinList(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map(v => (typeof v === "string" ? v.trim() : ""))
+      .filter(Boolean)
+      .join("\n");
+  }
+  if (typeof value === "string") return value.trim();
+  return "";
+}
+
+/**
+ * ✅ OpenAI extraction sonucunu normalize et
+ */
+function normalizeVisionExtraction(raw) {
+  const data = raw && typeof raw === "object" ? raw : {};
+
+  const barcode =
+    typeof data.barcode === "string" && data.barcode.trim()
+      ? data.barcode.trim()
+      : null;
+
+  const brand =
+    typeof data.brand === "string" && data.brand.trim()
+      ? data.brand.trim()
+      : null;
+
+  const productName =
+    typeof data.product_name === "string" && data.product_name.trim()
+      ? data.product_name.trim()
+      : typeof data.name === "string" && data.name.trim()
+      ? data.name.trim()
+      : null;
+
+  const ingredients = joinList(data.ingredients);
+  const allergens = joinList(data.allergens);
+  const claims = joinList(data.claims);
+  const logos = joinList(data.logos);
+  const warnings = joinList(data.warnings);
+  const generalText = joinList(data.general_text);
+
+  return {
+    barcode,
+    brand,
+    product_name: productName,
+    ingredients,
+    allergens,
+    claims,
+    logos,
+    warnings,
+    general_text: generalText
+  };
+}
+
+/**
+ * ✅ Vision extraction'dan analyzer input üret
+ */
+function buildAnalyzerInputFromVision(data) {
+  const labelsText = [
+    data.claims,
+    data.logos,
+    data.general_text
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  // warnings alanını traces'e bağlıyoruz:
+  // "eser miktarda", "aynı hatta üretilmiştir", vb. burada gelebilir.
+  return {
+    ingredients: data.ingredients || "",
+    productName: data.product_name || "",
+    allergens: data.allergens || "",
+    allergenTags: "",
+    traces: data.warnings || "",
+    labels: labelsText,
+    labelsTags: ""
+  };
+}
+
+/**
+ * ✅ Vision extraction için prompt
+ */
+function buildVisionPrompt() {
+  return [
+    "Sen bir gıda etiketi alan çıkarma motorusun.",
+    "Görselde gördüğün etiket bilgisini TÜMÜYLE uydurmadan çıkar.",
+    "Sadece aşağıdaki JSON formatında cevap ver.",
+    "JSON dışında hiçbir açıklama yazma.",
+    "",
+    "{",
+    '  "barcode": "string | null",',
+    '  "brand": "string | null",',
+    '  "product_name": "string | null",',
+    '  "ingredients": ["string", "..."],',
+    '  "allergens": ["string", "..."],',
+    '  "claims": ["string", "..."],',
+    '  "logos": ["string", "..."],',
+    '  "warnings": ["string", "..."],',
+    '  "general_text": ["string", "..."]',
+    "}",
+    "",
+    "Kurallar:",
+    "- Barkodu yalnız net görüyorsan yaz; emin değilsen null.",
+    "- Brand için marka adını yaz.",
+    "- product_name için ürün adını yaz.",
+    "- ingredients alanına yalnız içindekiler bölümünü yaz.",
+    "- allergens alanına yalnız alerjen/contains/may contain/iz/eser miktarda bölümlerini yaz.",
+    "- claims alanına 'glutensiz', 'gluten free', 'glutenfrei', 'sans gluten' gibi iddiaları yaz.",
+    "- logos alanına GFCO, crossed grain, gluten free logo gibi metin/amblemleri yaz.",
+    "- warnings alanına çapraz bulaş, aynı hatta üretim, eser miktarda vb. uyarıları yaz.",
+    "- general_text alanına karar vermede işe yarayabilecek diğer kısa metinleri yaz.",
+    "- Hiçbir alanı uydurma. Emin değilsen boş liste veya null kullan."
+  ].join("\n");
 }
 
 /**
@@ -72,7 +218,7 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 /**
- * ✅ OCR TEXT ANALYZE ENDPOINT (YENİ)
+ * ✅ OCR TEXT ANALYZE ENDPOINT
  * PWA OCR → labelText gönderir → decision döner.
  *
  * POST /analyze-label
@@ -106,12 +252,10 @@ app.post("/analyze-label", async (req, res) => {
     });
   }
 
-  // Marka/ad opsiyonel: varsa sertifika eşleşmesi yaparız
   let resolvedBrand = inputBrand;
   let resolvedName = inputName;
   let offAvailable = false;
 
-  // barcode varsa, boş alanları OFF'tan doldurmaya çalış (opsiyonel)
   if ((!resolvedBrand || !resolvedName) && barcode) {
     try {
       const offData = await fetchProductByBarcode(barcode);
@@ -136,7 +280,6 @@ app.post("/analyze-label", async (req, res) => {
       })
     : [];
 
-  // OCR metnini labels alanı üzerinden analiz ediyoruz
   const analysis = analyzeGluten({
     ingredients: "",
     productName: resolvedName || "",
@@ -164,6 +307,166 @@ app.post("/analyze-label", async (req, res) => {
       openFoodFactsUsedForPrefill: offAvailable
     }
   });
+});
+
+/**
+ * ✅ IMAGE ANALYZE ENDPOINT (YENİ)
+ * Fotoğrafı OpenAI Vision ile alanlara ayırır,
+ * sonra decisionEngine çalıştırır.
+ *
+ * POST /analyze-image
+ * body: {
+ *   imageBase64: "...."  (zorunlu, raw base64)
+ *   mimeType?: "image/jpeg" | "image/png"
+ *   barcode?: "..."      (opsiyonel, barkod ayrıca geldiyse)
+ * }
+ */
+app.post("/analyze-image", async (req, res) => {
+  const evaluatedAt = new Date().toISOString();
+
+  if (!openai) {
+    return res.status(500).json({
+      error: "OPENAI_NOT_CONFIGURED",
+      message: "OPENAI_API_KEY environment variable tanımlı değil.",
+      meta: { evaluatedAt }
+    });
+  }
+
+  const imageBase64 =
+    typeof req.body?.imageBase64 === "string" ? req.body.imageBase64.trim() : "";
+
+  const mimeType =
+    typeof req.body?.mimeType === "string" && req.body.mimeType.trim()
+      ? req.body.mimeType.trim()
+      : "image/jpeg";
+
+  const inputBarcode =
+    typeof req.body?.barcode === "string" && req.body.barcode.trim()
+      ? req.body.barcode.trim()
+      : null;
+
+  if (!imageBase64 || imageBase64.length < 100) {
+    return res.status(400).json({
+      error: "INVALID_INPUT",
+      message: "imageBase64 zorunludur.",
+      meta: { evaluatedAt }
+    });
+  }
+
+  try {
+    const response = await openai.responses.create({
+      model: OPENAI_MODEL,
+      input: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: buildVisionPrompt()
+            },
+            {
+              type: "input_image",
+              image_url: `data:${mimeType};base64,${imageBase64}`
+            }
+          ]
+        }
+      ]
+    });
+
+    const rawText = response.output_text || "";
+    const parsed = parseJsonFromModelText(rawText);
+
+    if (!parsed) {
+      return res.status(502).json({
+        error: "VISION_PARSE_FAILED",
+        message: "OpenAI çıktısı JSON olarak parse edilemedi.",
+        raw: rawText,
+        meta: {
+          evaluatedAt,
+          model: OPENAI_MODEL
+        }
+      });
+    }
+
+    const extracted = normalizeVisionExtraction(parsed);
+
+    // Barkod ayrıca geldiyse ve model boş bıraktıysa onu kullan
+    if (!extracted.barcode && inputBarcode) {
+      extracted.barcode = inputBarcode;
+    }
+
+    let offAvailable = false;
+    let offName = null;
+    let offBrand = null;
+
+    if (extracted.barcode && (!extracted.product_name || !extracted.brand)) {
+      try {
+        const offData = await fetchProductByBarcode(extracted.barcode);
+        if (offData && offData.status === 1 && offData.product) {
+          offAvailable = true;
+          const p = offData.product;
+          if (p.product_name) offName = p.product_name;
+          if (p.brands) offBrand = String(p.brands).split(",")[0].trim();
+        }
+      } catch {
+        // OFF başarısızsa extraction ile devam
+      }
+    }
+
+    const resolvedName = extracted.product_name || offName || null;
+    const resolvedBrand = extracted.brand || offBrand || null;
+
+    const certifications = resolvedBrand
+      ? findCertificationsForProduct({
+          brand: resolvedBrand,
+          productName: resolvedName || "",
+          productFamily: ""
+        })
+      : [];
+
+    const analyzerInput = buildAnalyzerInputFromVision({
+      ...extracted,
+      product_name: resolvedName
+    });
+
+    const analysis = analyzeGluten(analyzerInput);
+
+    const decision = decideGlutenStatus({
+      certifications,
+      ingredientAnalysis: analysis
+    });
+
+    return res.json({
+      barcode: extracted.barcode || null,
+      name: resolvedName,
+      brand: resolvedBrand,
+      extracted: {
+        ingredients: extracted.ingredients || null,
+        allergens: extracted.allergens || null,
+        claims: extracted.claims || null,
+        logos: extracted.logos || null,
+        warnings: extracted.warnings || null,
+        general_text: extracted.general_text || null
+      },
+      analysis,
+      decision,
+      meta: {
+        evaluatedAt,
+        source: "openai_vision",
+        model: OPENAI_MODEL,
+        openFoodFactsUsedForPrefill: offAvailable
+      }
+    });
+  } catch (err) {
+    return res.status(502).json({
+      error: "OPENAI_VISION_FAILED",
+      message: err?.message || "OpenAI vision request failed.",
+      meta: {
+        evaluatedAt,
+        model: OPENAI_MODEL
+      }
+    });
+  }
 });
 
 /**
